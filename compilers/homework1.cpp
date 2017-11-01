@@ -3,21 +3,22 @@
 #include <fstream>
 #include <functional>
 #include <unordered_map>
+#include <algorithm>
 using namespace std;
 
 // Abstract Syntax Tree
 class AST
 {
-	string _value;
-	AST* _left; // can be null
-	AST* _right; // can be null
-
 public:
+	string value;
+	AST* left; // can be null
+	AST* right; // can be null
+
 
 	AST(string value, AST* left, AST* right) {
-		_value = value;
-		_left = left;
-		_right = right;
+		value = value;
+		left = left;
+		right = right;
 	}
 	static AST* createAST(ifstream& input) {
 		if (!(input))
@@ -39,42 +40,60 @@ class Variable {
 public:
 	string type;
 	address var_address;
-	Variale(address address,string type):address(address),type(type)
-	{
-
-	}
+	Variable(address open_address,string type):var_address(open_address),type(type)
+	{ }
 };
 
 class SymbolTable {
 	// Think! what does a SymbolTable contain?
 	//std::unordered_map<
-	void
 public:
+		address free_address;
+		unordered_map<string,Variable> variable_table;
+		SymbolTable()
+		{
+			variable_table = unordered_map<string,Variable>();
+			free_address = 5;
+		}
+		Variable& operator[](string name){return this->variable_table[name];}
 	static SymbolTable generateSymbolTable(AST* tree) {
 		// TODO: create SymbolTable from AST
-		unsigned int free_adress = 5;
-		unordered_map<string,Variable> variavle_table;
+			if(tree->value == "program")
+			return generateSymbolTable(tree->right->left);
+			if(tree->value == "scope")
+			{
+				SymbolTable return_table = SymbolTable();
+				for(AST* head=tree->left;head->left != nullptr; head = head->left)
+				{
+					AST* var = head->right;
+					string identifier = var->left->left->value;//var->identifier->a
+					string type = var->right->value;//var->real
+					return_table[identifier] = Variable(return_table.free_address++,type);
+				}
+				return return_table;
+			}
+	}
+	void print_table()
+	{
+	  for (std::unordered_map<string,Variable>::iterator it=variable_table.begin(); it!=variable_table.end(); ++it)
+	    std::cout << it->first << " => " << it->second.var_address << '\n';
 	}
 };
-unordered_map<string,function> commands = {
-	{"program", [] () { cout << "a";}}
-}
 void generatePCode(AST* ast, SymbolTable symbolTable) {
 	// TODO: go over AST and print code
-
 }
 
 
 int main(int argc,char** argv)
 {
 	AST* ast;
-	cout << argv[1]  << ' ' << endl;
 	ifstream myfile(argv[1]);
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
 		myfile.close();
 		SymbolTable symbolTable = SymbolTable::generateSymbolTable(ast);
+		symbolTable.print_table();
 		generatePCode(ast, symbolTable);
 	}
 	else cout << "Unable to open file";
