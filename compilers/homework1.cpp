@@ -1,7 +1,7 @@
 // Homework-Collector.cpp : Defines the entry point for the console application.
 //
-
-#include "stdafx.h"
+#ifdef _WIN32
+	#include "stdafx.h"
 
 
 #include <iostream>
@@ -28,7 +28,7 @@ public:
 		this->left = left;
 		this->right = right;
 	}
-	/*
+
 	static void printTree(AST* head)
 	{
 		if (head == nullptr)
@@ -36,26 +36,27 @@ public:
 			cout << "~" << endl;
 			return;
 		}
-			
+
 		cout << head->value << endl;
 		printTree(head->left);
 		printTree(head->right);
 	}
-	*/
 
 	static AST* createAST(fstream& input) {
-		
+
 		if (!(input))
 			return nullptr;
 
 		string line;
 		getline(input, line);
+		if(line.find('\r') != string::npos)//crutial for running on unix
+			line.erase(line.end()-1);
 		if (line == "~")
 			return nullptr;
 		AST* left = createAST(input);
 		AST* right = createAST(input);
 		return new AST(line, left, right);
-		
+
 	}
 };
 typedef string types;
@@ -109,7 +110,6 @@ public:
 		string type = var->right->value;
 		string identifier = var->left->left->value;
 		table[identifier] = Variable(table.free_address++, type);
-
 	}
 	void print_table()
 	{
@@ -117,19 +117,8 @@ public:
 		std::vector<Variable> secondv;
 		for (auto const& imap : variable_table)
 		{
-			firstv.push_back(imap.first);
-			secondv.push_back(imap.second);
+			cout << imap.first << ',' << imap.second.var_address << endl;
 		}
-		/*
-		for (std::map<string, Variable>::iterator it = variable_table.begin(); it != variable_table.end(); ++it)
-			std::cout << it->first << " => " << it->second.var_address << '	\n';
-		*/
-		for (int i = 0; i < firstv.size(); i++)
-		{
-			cout << firstv[i] << ',' << secondv[i].var_address << endl;
-		}
-		
-		
 
 	}
 };
@@ -143,16 +132,25 @@ int main(int argc, char** argv)
 
 	AST* ast;
 	int x = 0;
-	fstream myfile("C:\\Users\\gilad\\Desktop\\Homework-Collector-master\\Homework-Collector-master\\compilers\\SamplesTxt\\tree5.txt");
+	fstream myfile;
+	if(argc > 1)//if there are command line arguments (argv[0] = program name)
+	{
+		myfile = fstream(argv[1]);
+	}
+	else
+	{
+		string input;
+		cin >> input;
+		myfile = fstream(input);
+	}
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
 		myfile.close();
 		SymbolTable symbolTable = SymbolTable::generateSymbolTable(ast);
-		//AST::printTree(ast);
 		symbolTable.print_table();
-		//generatePCode(ast, symbolTable);
-		
+		generatePCode(ast, symbolTable);
+
 	}
 	else cout << "Unable to open file";
 
