@@ -1,8 +1,10 @@
 // Homework-Collector.cpp : Defines the entry point for the console application.
 //
-#ifdef _WIN32
-	#include "stdafx.h"
+#pragma once
 
+#ifdef _WIN32
+#include "stdafx.h"
+#endif
 
 #include <iostream>
 #include <string>
@@ -11,6 +13,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+
 using namespace std;
 
 
@@ -67,12 +70,16 @@ class Variable {
 public:
 	string type;
 	address var_address;
+	size_t size;
 	Variable() {}
 	Variable(address open_address, string type)
 	{
 		this->var_address = open_address;
 		this->type = type;
-	}
+		if (type == "int" || type == "real" || type == "bool")
+		{
+			this->size = 1;
+		}
 };
 
 class SymbolTable {
@@ -109,12 +116,11 @@ public:
 		AST* var = head->right;
 		string type = var->right->value;
 		string identifier = var->left->left->value;
-		table[identifier] = Variable(table.free_address++, type);
+		table[identifier] = Variable(table.free_address, type);
+		table.free_address += table[identifier].size;
 	}
 	void print_table()
 	{
-		std::vector<string> firstv;
-		std::vector<Variable> secondv;
 		for (auto const& imap : variable_table)
 		{
 			cout << imap.first << ',' << imap.second.var_address << endl;
@@ -122,8 +128,140 @@ public:
 
 	}
 };
-void generatePCode(AST* ast, SymbolTable symbolTable) {
+
+
+void generatePCode(AST * ast, SymbolTable & symbolTable);
+void code(AST * head, SymbolTable & table);
+void execute_code(AST * head, SymbolTable & table);
+void load_expression(AST * head, SymbolTable & table);
+void load_variable(AST * head, SymbolTable & table);
+
+void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
+	code(ast->right->right, symbolTable);
+}
+void code(AST* head, SymbolTable& table) //gets StatementList
+{
+	if (head == nullptr)
+	{
+		return;
+	}
+
+	if (head->left != nullptr)
+		code(head->left, table);
+	execute_code(head->right, table);
+
+}
+#define data head->value
+int label_num = 0;
+inline void print_label(const int& label_num)
+{
+	cout << "L" << label_num << ':' << endl;
+}
+void execute_code(AST* head, SymbolTable& table)
+{
+
+	if (data == "if" && head->right->value == "else")
+	{
+		int if_label_num = label_num++;
+		int else_label_num = label_num++;
+		load_expression(head->left, table);
+		head = head->right;//jump to else node
+		cout << "fjp L" << if_label_num << endl;
+		code(head->left, table);
+		cout << "ujp L" << else_label_num << endl;
+		print_label(if_label_num);
+		code(head->right, table);
+		print_label(else_label_num);
+	}
+
+	else if (data == "if")
+	{
+		int la = label_num++;
+		load_expression(head->left, table);
+		cout << "fjp " << 'L' << la << endl;
+		code(head->right, table);
+		print_label(la);
+
+	}
+	if (data == "while")
+	{
+		int loop = label_num++;
+		int after_loop = label_num++;
+		print_label(loop);
+		load_expression(head->left, table);
+		cout << "fjp " << 'L' << after_loop << endl;
+		code(head->right, table);
+		cout << "ujp " << 'L' << loop << endl;
+		print_label(after_loop);
+
+	}
+
+	if (data == "print")
+	{
+		load_expression(head->left, table);
+		cout << "print" << endl;
+	}
+	if (data == "assignment")
+	{
+		load_variable(head->left, table);
+		load_expression(head->right, table);
+		cout << "sto" << endl;
+	}
+
+
+}
+
+void load_expression(AST* head, SymbolTable& table)
+{
+	map<string, string> operators =
+	{
+		{ "plus", "add" },
+		{ "minus", "sub" },
+		{ "multiply", "mul" },
+		{ "divide", "div" },
+		{ "lessThan" , "les" },
+		{ "greaterThan" , "grt" },
+		{ "lessOrEquals", "leq" },
+		{ "greaterOrEquals", "geq" },
+		{ "equals" , "equ" },
+		{ "notEquals", "neq" },
+		{ "and", "and" },
+		{ "or" , "or" },
+		{ "negative", "neg" },
+		{ "not", "not" }
+	};
+
+#pragma region Const
+
+	if (data.find("const") != string::npos)
+		cout << "ldc " << head->left->value << endl;
+	if (data == "true")
+		cout << "ldc 1" << endl;
+	if (data == "false")
+		cout << "ldc 0" << endl;
+#pragma endregion
+
+	if (data == "identifier")
+	{
+		load_variable(head, table);
+		cout << "ind" << endl;
+	}
+
+	if (operators.find(data) != operators.end())
+	{
+		load_expression(head->left, table);
+		if (head->right != nullptr) // binary operator
+			load_expression(head->right, table);
+		cout << operators[data] << endl;
+	}
+
+}
+
+void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
+{
+	if (data == "identifier")
+		cout << "ldc " << table[head->left->value].var_address << endl;
 }
 
 
