@@ -4,7 +4,7 @@
 
 #ifdef _WIN32
 #include "stdafx.h"
-#endif
+
 
 #include <iostream>
 #include <string>
@@ -14,7 +14,9 @@
 #include <vector>
 #include <algorithm>
 
+
 using namespace std;
+
 
 
 // Abstract Syntax Tree
@@ -80,6 +82,7 @@ public:
 		{
 			this->size = 1;
 		}
+	}
 };
 
 class SymbolTable {
@@ -125,7 +128,6 @@ public:
 		{
 			cout << imap.first << ',' << imap.second.var_address << endl;
 		}
-
 	}
 };
 
@@ -138,7 +140,7 @@ void load_variable(AST * head, SymbolTable & table);
 
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
-	code(ast->right->right, symbolTable);
+	code(ast->right->right,symbolTable);
 }
 void code(AST* head, SymbolTable& table) //gets StatementList
 {
@@ -159,16 +161,16 @@ inline void print_label(const int& label_num)
 	cout << "L" << label_num << ':' << endl;
 }
 void execute_code(AST* head, SymbolTable& table)
-{
+{	
 
 	if (data == "if" && head->right->value == "else")
 	{
 		int if_label_num = label_num++;
 		int else_label_num = label_num++;
-		load_expression(head->left, table);
+		load_expression(head->left,table);
 		head = head->right;//jump to else node
 		cout << "fjp L" << if_label_num << endl;
-		code(head->left, table);
+		code(head->left,table);
 		cout << "ujp L" << else_label_num << endl;
 		print_label(if_label_num);
 		code(head->right, table);
@@ -179,7 +181,7 @@ void execute_code(AST* head, SymbolTable& table)
 	{
 		int la = label_num++;
 		load_expression(head->left, table);
-		cout << "fjp " << 'L' << la << endl;
+		cout << "fjp " <<  'L' << la << endl;
 		code(head->right, table);
 		print_label(la);
 
@@ -204,8 +206,8 @@ void execute_code(AST* head, SymbolTable& table)
 	}
 	if (data == "assignment")
 	{
-		load_variable(head->left, table);
-		load_expression(head->right, table);
+		load_variable(head->left,table);
+		load_expression(head->right,table);
 		cout << "sto" << endl;
 	}
 
@@ -247,11 +249,11 @@ void load_expression(AST* head, SymbolTable& table)
 		load_variable(head, table);
 		cout << "ind" << endl;
 	}
-
-	if (operators.find(data) != operators.end())
+	
+	if(operators.find(data) != operators.end() )
 	{
-		load_expression(head->left, table);
-		if (head->right != nullptr) // binary operator
+		load_expression(head->left,table);
+		if(head->right != nullptr) // binary operator
 			load_expression(head->right, table);
 		cout << operators[data] << endl;
 	}
@@ -260,7 +262,7 @@ void load_expression(AST* head, SymbolTable& table)
 
 void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
 {
-	if (data == "identifier")
+	if(data == "identifier")
 		cout << "ldc " << table[head->left->value].var_address << endl;
 }
 
@@ -286,7 +288,6 @@ int main(int argc, char** argv)
 		ast = AST::createAST(myfile);
 		myfile.close();
 		SymbolTable symbolTable = SymbolTable::generateSymbolTable(ast);
-		symbolTable.print_table();
 		generatePCode(ast, symbolTable);
 
 	}
