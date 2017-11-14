@@ -1,15 +1,7 @@
-// Homework-Collector.cpp : Defines the entry point for the console application.
-//
-#pragma once
-
-#ifdef _WIN32
-#include "stdafx.h"
-
 
 #include <iostream>
 #include <string>
 #include <fstream>
-#include <functional>
 #include <map>
 #include <vector>
 #include <algorithm>
@@ -28,42 +20,25 @@ public:
 	AST* right; // can be null
 
 
-	AST(string value, AST* left, AST* right) {
+	AST(string value, AST* right, AST* left) {
 		this->value = value;
 		this->left = left;
 		this->right = right;
 	}
-
-	static void printTree(AST* head)
-	{
-		if (head == nullptr)
-		{
-			cout << "~" << endl;
-			return;
-		}
-
-		cout << head->value << endl;
-		printTree(head->left);
-		printTree(head->right);
-	}
-
-	static AST* createAST(fstream& input) {
-
+	static AST* createAST(ifstream& input) {
 		if (!(input))
 			return nullptr;
 
 		string line;
 		getline(input, line);
-		if(line.find('\r') != string::npos)//crutial for running on unix
-			line.erase(line.end()-1);
 		if (line == "~")
 			return nullptr;
 		AST* left = createAST(input);
 		AST* right = createAST(input);
-		return new AST(line, left, right);
-
+		return new AST(line, right, left);
 	}
 };
+
 typedef string types;
 typedef int address;
 class Variable {
@@ -102,11 +77,14 @@ public:
 		if (tree->value == "program")
 			return generateSymbolTable(tree->right);
 		if (tree->value == "content")
-		{
-			SymbolTable return_table = SymbolTable();
-			AST* head = tree->left->left;
-			fillSymbolTable(return_table, head);
-			return return_table;
+			{
+			if(tree->left != nullptr)
+			{
+				SymbolTable return_table = SymbolTable();
+				AST* head = tree->left->left;
+				fillSymbolTable(return_table, head);
+				return return_table;
+			}
 		}
 	}
 
@@ -161,7 +139,7 @@ inline void print_label(const int& label_num)
 	cout << "L" << label_num << ':' << endl;
 }
 void execute_code(AST* head, SymbolTable& table)
-{	
+{
 
 	if (data == "if" && head->right->value == "else")
 	{
@@ -249,7 +227,7 @@ void load_expression(AST* head, SymbolTable& table)
 		load_variable(head, table);
 		cout << "ind" << endl;
 	}
-	
+
 	if(operators.find(data) != operators.end() )
 	{
 		load_expression(head->left,table);
@@ -272,16 +250,16 @@ int main(int argc, char** argv)
 
 	AST* ast;
 	int x = 0;
-	fstream myfile;
+	ifstream myfile;
 	if(argc > 1)//if there are command line arguments (argv[0] = program name)
 	{
-		myfile = fstream(argv[1]);
+		myfile = ifstream(argv[1]);
 	}
 	else
 	{
 		string input;
 		cin >> input;
-		myfile = fstream(input);
+		myfile = ifstream(input);
 	}
 	if (myfile.is_open())
 	{
@@ -292,7 +270,5 @@ int main(int argc, char** argv)
 
 	}
 	else cout << "Unable to open file";
-
-	cin >> x;
 	return 0;
 }
