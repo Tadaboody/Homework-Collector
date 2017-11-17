@@ -4,7 +4,6 @@
 #include <fstream>
 #include <map>
 #include <vector>
-#include <algorithm>
 
 
 using namespace std;
@@ -77,16 +76,17 @@ public:
 		if (tree->value == "program")
 			return generateSymbolTable(tree->right);
 		if (tree->value == "content")
-			{
+		{
+			SymbolTable return_table = SymbolTable();
 			if(tree->left != nullptr)
 			{
-				SymbolTable return_table = SymbolTable();
 				AST* head = tree->left->left;
 				fillSymbolTable(return_table, head);
-				return return_table;
 			}
+			return return_table;
 		}
 	}
+
 
 	static void fillSymbolTable(SymbolTable& table, AST* head)
 	{
@@ -244,7 +244,23 @@ void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct acc
 		cout << "ldc " << table[head->left->value].var_address << endl;
 }
 
+int main()
+{
+	AST* ast;
+	SymbolTable symbolTable;
+	ifstream myfile("tree7.txt");
+	if (myfile.is_open())
+	{
+		ast = AST::createAST(myfile);
+		myfile.close();
+		symbolTable = SymbolTable::generateSymbolTable(ast);
+		generatePCode(ast, symbolTable);
+	}
+	else cout << "Unable to open file";
+	return 0;
+}
 
+/*
 int main(int argc, char** argv)
 {
 
@@ -272,3 +288,4 @@ int main(int argc, char** argv)
 	else cout << "Unable to open file";
 	return 0;
 }
+*/
