@@ -73,18 +73,18 @@ public:
 	Variable& operator[](string name) { return this->variable_table[name]; }
 	static SymbolTable generateSymbolTable(AST* tree) {
 		// TODO: create SymbolTable from AST
+		SymbolTable return_table = SymbolTable();
 		if (tree->value == "program")
 			return generateSymbolTable(tree->right);
 		if (tree->value == "content")
 		{
-			SymbolTable return_table = SymbolTable();
 			if(tree->left != nullptr)
 			{
 				AST* head = tree->left->left;
 				fillSymbolTable(return_table, head);
 			}
-			return return_table;
 		}
+		return return_table;
 	}
 
 
@@ -188,8 +188,6 @@ void execute_code(AST* head, SymbolTable& table)
 		load_expression(head->right,table);
 		cout << "sto" << endl;
 	}
-
-
 }
 
 void load_expression(AST* head, SymbolTable& table)
@@ -212,7 +210,6 @@ void load_expression(AST* head, SymbolTable& table)
 		{ "not", "not" }
 	};
 
-#pragma region Const
 
 	if (data.find("const") != string::npos)
 		cout << "ldc " << head->left->value << endl;
@@ -220,7 +217,6 @@ void load_expression(AST* head, SymbolTable& table)
 		cout << "ldc 1" << endl;
 	if (data == "false")
 		cout << "ldc 0" << endl;
-#pragma endregion
 
 	if (data == "identifier")
 	{
