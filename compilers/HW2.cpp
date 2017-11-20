@@ -194,6 +194,7 @@ void execute_code(AST* head, SymbolTable& table)
 		static int global_switch_num = 0;
 		int switch_num = global_switch_num++;
 		load_expression(head->left,table);
+		cout << "neg" << endl;
 		cout << "ixj switch_end_" << switch_num << endl;
 		int number_of_cases = generate_cases(head->right,table,switch_num);
 		for(;number_of_cases>0;number_of_cases--)
