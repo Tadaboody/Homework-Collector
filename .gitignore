@@ -1,5 +1,6 @@
 *.out
-**/*.vscode
 *.zip
 *.c
 submitters.txt
+*.txt
+**/out/
