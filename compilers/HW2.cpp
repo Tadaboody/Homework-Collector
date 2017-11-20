@@ -7,9 +7,7 @@
 
 
 using namespace std;
-
-
-
+class SymbolTable;
 // Abstract Syntax Tree
 class AST
 {
@@ -122,13 +120,13 @@ public:
 	}
 };
 
-
 void generatePCode(AST * ast, SymbolTable & symbolTable);
 void code(AST * head, SymbolTable & table);
 void execute_code(AST * head, SymbolTable & table);
 void load_expression(AST * head, SymbolTable & table);
 void load_variable(AST * head, SymbolTable & table);
-vector<string> generate_cases(AST* head, SymbolTable& table,int switch_num);
+int generate_cases(AST* head, SymbolTable& table,int switch_num);
+
 
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
@@ -197,11 +195,12 @@ void execute_code(AST* head, SymbolTable& table)
 		int switch_num = global_switch_num++;
 		load_expression(head->left,table);
 		cout << "ixj switch_end_" << switch_num << endl;
-		vector<string> cases = generate_cases(head->right,table,switch_num);
-		for(string case_name: cases)
+		int number_of_cases = generate_cases(head->right,table,switch_num);
+		for(;number_of_cases>0;number_of_cases--)
 		{
-			cout << "ujp case_" << switch_num << '_' << case_name << endl;
+			cout << "ujp case_" << switch_num << '_' << number_of_cases << endl;
 		}
+		
 		cout << "switch_end_" << switch_num << ':' << endl;
 	}
 
@@ -267,20 +266,18 @@ void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct acc
 	if(data == "identifier")
 		cout << "ldc " << table[head->left->value].var_address << endl;
 }
-vector<string> generate_cases(AST* head, SymbolTable& table,int switch_num)
+int generate_cases(AST* head, SymbolTable& table,int switch_num)
 {
 	int number_of_cases;
-	vector<string> cases;
 	if(head->left != nullptr)
-		cases = generate_cases(head->left,table,switch_num) + 1;
+		number_of_cases = generate_cases(head->left,table,switch_num) + 1;
 	else
-		cases = vector<string>();
+		number_of_cases = 1;
 	AST* case_node = head->right;
 	cout << "case_" << switch_num << '_' <<  case_node->left->left->value << ':' << endl;//case->constInt->value
 	code(case_node->right,table);
 	cout << "ujp switch_end_" << switch_num << endl;
-	cases.push_back(case_node->left->value);
-	return cases;
+	return number_of_cases;
 }
 /*
 int main()
@@ -304,7 +301,6 @@ int main(int argc, char** argv)
 {
 
 	AST* ast;
-	int x = 0;
 	ifstream myfile;
 	if(argc > 1)//if there are command line arguments (argv[0] = program name)
 	{
@@ -313,6 +309,7 @@ int main(int argc, char** argv)
 	else
 	{
 		string input;
+		cout << "No CL arguments,enter tree path:";
 		cin >> input;
 		myfile = ifstream(input);
 	}
@@ -324,7 +321,7 @@ int main(int argc, char** argv)
 		generatePCode(ast, symbolTable);
 
 	}
-	else cout << "Unable to open file";
+	else cout << "Unable to open file" << endl;
 	return 0;
 }
 
