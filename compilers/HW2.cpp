@@ -96,6 +96,7 @@ public:
 	{
 		{"int",1},
 		{"bool",1},
+		{"pointer",1},
 		{"array",1}
 	};
 
@@ -108,6 +109,11 @@ public:
 		AST* var = head->right;
 		string type = var->right->value;
 		string identifier = var->left->left->value;
+		Variable new_var;
+		if(type=="pointer")
+		{
+			string pointer_type = var->right->left->left->value;
+		}
 		table[identifier] = Variable(table.free_address, type,table.size_table[type]);
 		table.free_address += table[identifier].size;
 	}
@@ -160,12 +166,12 @@ void execute_code(AST* head, SymbolTable& table)
 		int else_label_num = label_num++;
 		load_expression(head->left,table);
 		head = head->right;//jump to else node
-		cout << "fjp L" << if_label_num << endl;
+		cout << "fjp skip_if_" << if_label_num << endl;
 		code(head->left,table);
-		cout << "ujp L" << else_label_num << endl;
-		print_label(if_label_num);
+		cout << "ujp skip_else_" << else_label_num << endl;
+		cout << "skip_if_" << if_label_num << ':' << endl;
 		code(head->right, table);
-		print_label(else_label_num);
+		cout << "skip_else_" << else_label_num << ':' << endl;
 	}
 
 	else if (data == "if")
@@ -266,6 +272,11 @@ void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct acc
 {
 	if(data == "identifier")
 		cout << "ldc " << table[head->left->value].var_address << endl;
+	else if(data == "pointer")
+	{
+		load_variable(head->left,table);
+		cout << "ind" << endl;
+	}
 }
 int generate_cases(AST* head, SymbolTable& table,int switch_num)
 {
