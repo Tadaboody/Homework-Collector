@@ -4,8 +4,8 @@
 #include <fstream>
 #include <map>
 #include <vector>
-
-
+#include <utility>
+#include <memory>
 using namespace std;
 class SymbolTable;
 // Abstract Syntax Tree
@@ -54,9 +54,18 @@ public:
 	}
 };
 
-class Array : Variable
+class Array : public Variable
 {
-
+	public:
+		string member_type;
+		shared_ptr<vector<pair<int,int>>> dimensions;
+		Array() {Variable::Variable()}
+		Array(address open_address,string type, int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
+		{
+			this->dimensions = move(dimensions);
+			this->member_type = member_type_size;
+			Variable::Variable(open_address,type,size);
+		}
 };
 
 class Record : Variable
@@ -70,13 +79,13 @@ class SymbolTable {
 	//std::unordered_map<
 public:
 	address free_address;
-	map<string, Variable> variable_table;
+	map<string, unique_ptr<Variable>> variable_table;
 	SymbolTable()
 	{
-		variable_table = map<string, Variable>();
+		variable_table = map<string, unique_ptr<Variable>>();
 		free_address = 5;
 	}
-	Variable& operator[](string name) { return this->variable_table[name]; }
+	Variable& operator[](string name) { return *this->variable_table[name]; }
 	static SymbolTable generateSymbolTable(AST* tree) {
 		// TODO: create SymbolTable from AST
 		SymbolTable return_table = SymbolTable();
@@ -109,7 +118,20 @@ public:
 		AST* var = head->right;
 		string type = var->right->value;
 		string identifier = var->left->left->value;
-		Variable new_var;
+		unique_ptr<Variable> new_var;
+		if(type=="array")
+		{
+			int member_type_size = stoi(var->right->right->value);
+			unique_ptr<vector<pair<int,int>>> dimensions(new vector<pair<int,int>>());
+			for(AST* rangeList = var->right->left;rangeList!=nullptr;rangeList=rangeList->left)
+			{
+				AST* range = rangeList->left;
+				int start = stoi(range->left->value);
+				int end = stoi(range->right->value);
+				dimensions->push_back(make_pair(start,end));
+			}
+			new_var = unique_ptr<Array>(new Array(table.free_address,type,member_type_size,dimensions));
+		}
 		if(type=="pointer")
 		{
 			string pointer_type = var->right->left->left->value;
@@ -121,7 +143,7 @@ public:
 	{
 		for (auto const& imap : variable_table)
 		{
-			cout << imap.first << ',' << imap.second.var_address << endl;
+			cout << imap.first << ',' << imap.second->var_address << endl;
 		}
 	}
 };
