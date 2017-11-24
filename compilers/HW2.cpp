@@ -56,16 +56,46 @@ public:
 
 class Array : public Variable
 {
+	private:
+		int subpart;
 	public:
-		string member_type;
+		int member_type_size;
+		string memeber_type;
 		shared_ptr<vector<pair<int,int>>> dimensions;
-		Array() {Variable::Variable()}
-		Array(address open_address,string type, int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
+		Array(address open_address,string type, string member_type ,int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
+		:Variable(open_address,type,calculate_size(*dimensions,member_type_size)),
+		dimensions(move(dimensions)),member_type_size(member_type_size),memeber_type(memeber_type)
 		{
 			this->dimensions = move(dimensions);
-			this->member_type = member_type_size;
-			Variable::Variable(open_address,type,size);
+			this->member_type_size = member_type_size;
+			this->memeber_type = memeber_type;
+			calculate_subpart();
 		}
+		static int calculate_size(const vector<pair<int,int>>& dimensions,int member_type_size)
+		{
+			int size =1;
+			for(const pair<int,int>& range : dimensions)
+			{
+				size*= (range.second - range.first + 1);
+			}
+			return size;
+		}
+	private:
+	inline int calculate_subpart()
+	{
+		subpart = 0;
+		int volume = 1;
+		for(const pair<int,int>& range : *this->dimensions)
+		{
+			subpart+=range.first*volume;
+			volume*= (range.second - range.first +1);
+		}
+		return subpart*member_type_size;
+	}
+	int access_shift()
+	{
+
+	}
 };
 
 class Record : Variable
@@ -121,22 +151,23 @@ public:
 		unique_ptr<Variable> new_var;
 		if(type=="array")
 		{
-			int member_type_size = stoi(var->right->right->value);
+			string member_type = var->right->right->value;
+			int member_type_size = table.size_table[member_type];
 			unique_ptr<vector<pair<int,int>>> dimensions(new vector<pair<int,int>>());
 			for(AST* rangeList = var->right->left;rangeList!=nullptr;rangeList=rangeList->left)
 			{
-				AST* range = rangeList->left;
-				int start = stoi(range->left->value);
-				int end = stoi(range->right->value);
+				AST* range = rangeList->right;
+				int start = stoi(range->left->left->value);
+				int end = stoi(range->right->left->value);
 				dimensions->push_back(make_pair(start,end));
 			}
-			new_var = unique_ptr<Array>(new Array(table.free_address,type,member_type_size,dimensions));
+			new_var = unique_ptr<Array>(new Array(table.free_address,type,member_type,member_type_size,dimensions));
 		}
-		if(type=="pointer")
+		else
 		{
-			string pointer_type = var->right->left->left->value;
+			new_var = unique_ptr<Variable>(new Variable(table.free_address,type,table.size_table[type]));
 		}
-		table[identifier] = Variable(table.free_address, type,table.size_table[type]);
+		table.variable_table[identifier] = move(new_var);
 		table.free_address += table[identifier].size;
 	}
 	void print_table()
@@ -200,9 +231,9 @@ void execute_code(AST* head, SymbolTable& table)
 	{
 		int la = label_num++;
 		load_expression(head->left, table);
-		cout << "fjp " <<  'L' << la << endl;
+		cout << "fjp " <<  "skip_if_" << la << endl;
 		code(head->right, table);
-		print_label(la);
+		cout << "skip_if_" << la << ':' << endl;
 
 	}
 	if (data == "while")
