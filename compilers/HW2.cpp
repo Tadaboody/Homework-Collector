@@ -61,14 +61,14 @@ class Array : public Variable
 	public:
 		int subpart;
 		int member_type_size;
-		string memeber_type;
+		string member_type;
 		unique_ptr<vector<pair<int,int>>> dimensions;
 		Array(address open_address,string type, string member_type ,int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
 		:Variable(open_address,type,calculate_size(*dimensions,member_type_size))
 		{
+			this->member_type = member_type;
 			this->dimensions = move(dimensions);
 			this->member_type_size = member_type_size;
-			this->memeber_type = memeber_type;
 			calculate_subpart();
 		}
 		static int calculate_size(const vector<pair<int,int>>& dimensions,int member_type_size)
@@ -152,6 +152,8 @@ public:
 		if(type=="array")
 		{
 			string member_type = var->right->right->value;
+			if(member_type == "identifier")
+				member_type = var->right->right->left->value;//botchy
 			int member_type_size = table.size_table[member_type];
 			unique_ptr<vector<pair<int,int>>> dimensions(new vector<pair<int,int>>());
 			for(AST* rangeList = var->right->left;rangeList!=nullptr;rangeList=rangeList->left)
@@ -240,12 +242,12 @@ void execute_code(AST* head, SymbolTable& table)
 	{
 		int loop = label_num++;
 		int after_loop = label_num++;
-		print_label(loop);
+		cout << "while_" << loop << ':' << endl;
 		load_expression(head->left, table);
-		cout << "fjp " << 'L' << after_loop << endl;
+		cout << "fjp " << "while_out_" << after_loop  << endl;
 		code(head->right, table);
-		cout << "ujp " << 'L' << loop << endl;
-		print_label(after_loop);
+		cout << "ujp " << "while_" << loop << endl;
+		cout << "while_out_" << after_loop << ':' << endl;
 
 	}
 	if(data == "switch")
@@ -305,7 +307,7 @@ void load_expression(AST* head, SymbolTable& table)
 	if (data == "false")
 		cout << "ldc 0" << endl;
 
-	if (data == "identifier")
+	if (data == "identifier"||data == "array" || data=="pointer")
 	{
 		load_variable(head, table);
 		cout << "ind" << endl;
@@ -338,22 +340,25 @@ string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct a
 		// string identifier = head-
 		const Array& array = dynamic_cast<Array&>(table[type]);
 		access_shift(head->right,table,array);
-		return array.memeber_type;
+		return array.member_type;
 	}
-	return "";
+	return "Shouldn't get here";
 }
 //codei
 void access_shift(AST* indexList, SymbolTable& table,const Array& array)
 {
-	int accumilated_size = array.member_type_size;
+	int accumilated_size = Array::calculate_size(*array.dimensions,array.member_type_size);
 	stack<AST*> backtrace = stack<AST*>();
-	for(;indexList!=nullptr;indexList=indexList->left)backtrace.push(indexList);
-	for(int i=0;!backtrace.empty();i++,backtrace.pop())
+	for(int i=0;indexList!=nullptr;indexList=indexList->left,i++)
+	{
+		backtrace.push(indexList);
+	}
+	for(int i=backtrace.size()-1;!backtrace.empty();i--,backtrace.pop())
 	{
 		indexList = backtrace.top();
+		accumilated_size/= ((*array.dimensions)[i].second -(*array.dimensions)[i].first +1);
 		load_expression(indexList->right,table);
 		cout << "ixa " << accumilated_size << endl;
-		accumilated_size*=(*array.dimensions)[i].first;
 	}
 	cout << "dec " << array.subpart << endl;
 
