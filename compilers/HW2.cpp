@@ -73,7 +73,7 @@ class Array : public Variable
 		}
 		static int calculate_size(const vector<pair<int,int>>& dimensions,int member_type_size)
 		{
-			int size =1;
+			int size =member_type_size;
 			for(const pair<int,int>& range : dimensions)
 			{
 				size*= (range.second - range.first + 1);
@@ -84,17 +84,13 @@ class Array : public Variable
 	inline int calculate_subpart()
 	{
 		subpart = 0;
-		int volume = 1;
+		int volume = member_type_size;
 		for(const pair<int,int>& range : *this->dimensions)
 		{
 			subpart+=range.first*volume;
 			volume*= (range.second - range.first +1);
 		}
-		return subpart*member_type_size;
-	}
-	int access_shift()
-	{
-
+		return subpart;
 	}
 };
 
@@ -135,8 +131,8 @@ public:
 	{
 		{"int",1},
 		{"bool",1},
-		{"pointer",1},
-		{"array",1}
+		{"real",1},
+		{"pointer",1}
 	};
 
 	static void fillSymbolTable(SymbolTable& table, AST* head)
@@ -171,6 +167,7 @@ public:
 		}
 		table.variable_table[identifier] = move(new_var);
 		table.free_address += table[identifier].size;
+		table.size_table[identifier] = table[identifier].size;
 	}
 	void print_table()
 	{
