@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <memory>
+#include <stack>
 using namespace std;
 class SymbolTable;
 // Abstract Syntax Tree
@@ -52,19 +53,18 @@ public:
 		this->type = type;
 		this->size = size;
 	}
+	virtual ~Variable(){}
 };
 
 class Array : public Variable
 {
-	private:
-		int subpart;
 	public:
+		int subpart;
 		int member_type_size;
 		string memeber_type;
-		shared_ptr<vector<pair<int,int>>> dimensions;
+		unique_ptr<vector<pair<int,int>>> dimensions;
 		Array(address open_address,string type, string member_type ,int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
-		:Variable(open_address,type,calculate_size(*dimensions,member_type_size)),
-		dimensions(move(dimensions)),member_type_size(member_type_size),memeber_type(memeber_type)
+		:Variable(open_address,type,calculate_size(*dimensions,member_type_size))
 		{
 			this->dimensions = move(dimensions);
 			this->member_type_size = member_type_size;
@@ -183,9 +183,9 @@ void generatePCode(AST * ast, SymbolTable & symbolTable);
 void code(AST * head, SymbolTable & table);
 void execute_code(AST * head, SymbolTable & table);
 void load_expression(AST * head, SymbolTable & table);
-void load_variable(AST * head, SymbolTable & table);
+string load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
-
+void access_shift(AST* indexList, SymbolTable& table,const Array& array);
 
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
@@ -320,16 +320,43 @@ void load_expression(AST* head, SymbolTable& table)
 	}
 
 }
-
-void load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
+//codel
+string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
 {
-	if(data == "identifier")
+	if(data == "identifier"){
 		cout << "ldc " << table[head->left->value].var_address << endl;
+		return head->left->value;
+	}
 	else if(data == "pointer")
 	{
 		load_variable(head->left,table);
 		cout << "ind" << endl;
+		return data;
+	}else if(data == "array")
+	{
+		string type = load_variable(head->left,table);
+		// string identifier = head-
+		const Array& array = dynamic_cast<Array&>(table[type]);
+		access_shift(head->right,table,array);
+		return array.memeber_type;
 	}
+	return "";
+}
+//codei
+void access_shift(AST* indexList, SymbolTable& table,const Array& array)
+{
+	int accumilated_size = array.member_type_size;
+	stack<AST*> backtrace = stack<AST*>();
+	for(;indexList!=nullptr;indexList=indexList->left)backtrace.push(indexList);
+	for(int i=0;!backtrace.empty();i++,backtrace.pop())
+	{
+		indexList = backtrace.top();
+		load_expression(indexList->right,table);
+		cout << "ixa " << accumilated_size << endl;
+		accumilated_size*=(*array.dimensions)[i].first;
+	}
+	cout << "dec " << array.subpart << endl;
+
 }
 int generate_cases(AST* head, SymbolTable& table,int switch_num)
 {
