@@ -40,14 +40,14 @@ public:
 typedef string types;
 typedef int address;
 class Variable {
-	// Think! what does a Variable contain?
-	//"CORRECTER" enum types {Int,Real,Bool};
 public:
 	string type;
 	address var_address;
 	size_t size;
+	int offset;
 	Variable() {}
-	Variable(address open_address, string type,int size)
+	Variable(address open_address, string type,int size,int offset):
+	var_address(open_address),type(type),offset(offset)
 	{
 		this->var_address = open_address;
 		this->type = type;
@@ -63,8 +63,8 @@ class Array : public Variable
 		int member_type_size;
 		string member_type;
 		unique_ptr<vector<pair<int,int>>> dimensions;
-		Array(address open_address,string type, string member_type ,int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
-		:Variable(open_address,type,calculate_size(*dimensions,member_type_size))
+		Array(address open_address,string type,int offset, string member_type ,int member_type_size, unique_ptr<vector<pair<int,int>>>& dimensions)
+		:Variable(open_address,type,calculate_size(*dimensions,member_type_size),offset)
 		{
 			this->member_type = member_type;
 			this->dimensions = move(dimensions);
@@ -93,7 +93,15 @@ class Array : public Variable
 		return subpart;
 	}
 };
-
+class Pointer : public Variable
+{
+	public:
+	string member_type;
+	Pointer(address open_address, string type,int size,int offset,string member_type)
+		:Variable(open_address,type,size,offset)
+		,member_type(member_type)
+		{}
+};
 class Record : Variable
 {
 
@@ -101,8 +109,6 @@ class Record : Variable
 
 
 class SymbolTable {
-	// Think! what does a SymbolTable contain?
-	//std::unordered_map<
 public:
 	address free_address;
 	map<string, unique_ptr<Variable>> variable_table;
@@ -135,15 +141,18 @@ public:
 		{"pointer",1}
 	};
 
-	static void fillSymbolTable(SymbolTable& table, AST* head)
+	static int fillSymbolTable(SymbolTable& table, AST* head,address scope_base=0)
 	{
+		int scope_size = 0;
 		if (head->left != nullptr)
 		{
-			fillSymbolTable(table, head->left);
+			scope_size += fillSymbolTable(table, head->left,scope_base);
 		}
 		AST* var = head->right;
 		string type = var->right->value;
 		string identifier = var->left->left->value;
+		address var_address = table.free_address;
+		int offset = var_address - scope_base;
 		unique_ptr<Variable> new_var;
 		if(type=="array")
 		{
@@ -159,15 +168,25 @@ public:
 				int end = stoi(range->right->left->value);
 				dimensions->push_back(make_pair(start,end));
 			}
-			new_var = unique_ptr<Array>(new Array(table.free_address,type,member_type,member_type_size,dimensions));
+			new_var = unique_ptr<Array>(new Array(table.free_address,type,offset,member_type,member_type_size,dimensions));
+		}else if(type=="record")
+		{
+			int size = fillSymbolTable(table,var->right->left,var_address);
+			new_var = unique_ptr<Variable>(new Variable(var_address,type,size,offset));
+		}
+		else if(type=="pointer")
+		{
+			string member_type = var->right->left->left->value;
+			new_var = unique_ptr<Variable>(new Pointer(table.free_address,type,table.size_table[type],offset,member_type));
 		}
 		else
 		{
-			new_var = unique_ptr<Variable>(new Variable(table.free_address,type,table.size_table[type]));
+			new_var = unique_ptr<Variable>(new Variable(table.free_address,type,table.size_table[type],offset));
 		}
 		table.variable_table[identifier] = move(new_var);
-		table.free_address += table[identifier].size;
+		table.free_address += type=="record"?0:table[identifier].size;
 		table.size_table[identifier] = table[identifier].size;
+		return table[identifier].size+scope_size;
 	}
 	void print_table()
 	{
@@ -179,18 +198,18 @@ public:
 };
 
 void generatePCode(AST * ast, SymbolTable & symbolTable);
-void code(AST * head, SymbolTable & table);
-void execute_code(AST * head, SymbolTable & table);
+void code(AST * head, SymbolTable & table,int loop_num);
+void execute_code(AST * head, SymbolTable & table,int loop_num);
 void load_expression(AST * head, SymbolTable & table);
 string load_variable(AST * head, SymbolTable & table);
-int generate_cases(AST* head, SymbolTable& table,int switch_num);
+int generate_cases(AST* head, SymbolTable& table,int switch_num,int loop_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array& array);
 
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
-	code(ast->right->right,symbolTable);
+	code(ast->right->right,symbolTable,0);
 }
-void code(AST* head, SymbolTable& table) //gets StatementList
+void code(AST* head, SymbolTable& table,int loop_num) //gets StatementList
 {
 	if (head == nullptr)
 	{
@@ -198,18 +217,15 @@ void code(AST* head, SymbolTable& table) //gets StatementList
 	}
 
 	if (head->left != nullptr)
-		code(head->left, table);
-	execute_code(head->right, table);
+		code(head->left, table,loop_num);
+	execute_code(head->right, table,loop_num);
 
 }
 #define data head->value
 int label_num = 0;
-inline void print_label(const int& label_num)
-{
-	cout << "L" << label_num << ':' << endl;
-}
 
-void execute_code(AST* head, SymbolTable& table)
+
+void execute_code(AST* head, SymbolTable& table,int loop_num)
 {
 
 	if (data == "if" && head->right->value == "else")
@@ -219,10 +235,10 @@ void execute_code(AST* head, SymbolTable& table)
 		load_expression(head->left,table);
 		head = head->right;//jump to else node
 		cout << "fjp skip_if_" << if_label_num << endl;
-		code(head->left,table);
+		code(head->left,table,loop_num);
 		cout << "ujp skip_else_" << else_label_num << endl;
 		cout << "skip_if_" << if_label_num << ':' << endl;
-		code(head->right, table);
+		code(head->right, table,loop_num);
 		cout << "skip_else_" << else_label_num << ':' << endl;
 	}
 
@@ -231,7 +247,7 @@ void execute_code(AST* head, SymbolTable& table)
 		int la = label_num++;
 		load_expression(head->left, table);
 		cout << "fjp " <<  "skip_if_" << la << endl;
-		code(head->right, table);
+		code(head->right, table,loop_num);
 		cout << "skip_if_" << la << ':' << endl;
 
 	}
@@ -242,7 +258,7 @@ void execute_code(AST* head, SymbolTable& table)
 		cout << "while_" << loop << ':' << endl;
 		load_expression(head->left, table);
 		cout << "fjp " << "while_out_" << after_loop  << endl;
-		code(head->right, table);
+		code(head->right, table, after_loop);
 		cout << "ujp " << "while_" << loop << endl;
 		cout << "while_out_" << after_loop << ':' << endl;
 
@@ -254,7 +270,7 @@ void execute_code(AST* head, SymbolTable& table)
 		load_expression(head->left,table);
 		cout << "neg" << endl;
 		cout << "ixj switch_end_" << switch_num << endl;
-		int number_of_cases = generate_cases(head->right,table,switch_num);
+		int number_of_cases = generate_cases(head->right,table,switch_num,loop_num);
 		for(;number_of_cases>0;number_of_cases--)
 		{
 			cout << "ujp case_" << switch_num << '_' << number_of_cases << endl;
@@ -273,6 +289,10 @@ void execute_code(AST* head, SymbolTable& table)
 		load_variable(head->left,table);
 		load_expression(head->right,table);
 		cout << "sto" << endl;
+	}
+	if(data == "break")
+	{
+		cout << "ujp while_out_" << loop_num << endl;
 	}
 }
 
@@ -304,7 +324,7 @@ void load_expression(AST* head, SymbolTable& table)
 	if (data == "false")
 		cout << "ldc 0" << endl;
 
-	if (data == "identifier"||data == "array" || data=="pointer")
+	if (data == "identifier"||data == "array" || data=="pointer" || data=="record")
 	{
 		load_variable(head, table);
 		cout << "ind" << endl;
@@ -328,9 +348,9 @@ string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct a
 	}
 	else if(data == "pointer")
 	{
-		load_variable(head->left,table);
+		string type = load_variable(head->left,table);
 		cout << "ind" << endl;
-		return data;
+		return dynamic_cast<Pointer&>(table[type]).member_type;
 	}else if(data == "array")
 	{
 		string type = load_variable(head->left,table);
@@ -338,6 +358,12 @@ string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct a
 		const Array& array = dynamic_cast<Array&>(table[type]);
 		access_shift(head->right,table,array);
 		return array.member_type;
+	}else if(data=="record")
+	{
+		string type = load_variable(head->left,table);
+		string member_type = head->right->left->value;
+		cout << "inc " << table[member_type].offset << endl;
+		return member_type;
 	}
 	return "Shouldn't get here";
 }
@@ -360,16 +386,16 @@ void access_shift(AST* indexList, SymbolTable& table,const Array& array)
 	cout << "dec " << array.subpart << endl;
 
 }
-int generate_cases(AST* head, SymbolTable& table,int switch_num)
+int generate_cases(AST* head, SymbolTable& table,int switch_num,int loop_num)
 {
 	int number_of_cases;
 	if(head->left != nullptr)
-		number_of_cases = generate_cases(head->left,table,switch_num) + 1;
+		number_of_cases = generate_cases(head->left,table,switch_num,loop_num) + 1;
 	else
 		number_of_cases = 1;
 	AST* case_node = head->right;
 	cout << "case_" << switch_num << '_' <<  case_node->left->left->value << ':' << endl;//case->constInt->value
-	code(case_node->right,table);
+	code(case_node->right,table,loop_num);
 	cout << "ujp switch_end_" << switch_num << endl;
 	return number_of_cases;
 }

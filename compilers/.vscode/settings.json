@@ -40,7 +40,8 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "memory": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "deque": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
