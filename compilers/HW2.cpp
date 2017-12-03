@@ -197,19 +197,20 @@ public:
 	}
 };
 
+enum ControlScope{While,Switch,None};
 void generatePCode(AST * ast, SymbolTable & symbolTable);
-void code(AST * head, SymbolTable & table,int loop_num);
-void execute_code(AST * head, SymbolTable & table,int loop_num);
+void code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
+void execute_code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
 void load_expression(AST * head, SymbolTable & table);
 string load_variable(AST * head, SymbolTable & table);
-int generate_cases(AST* head, SymbolTable& table,int switch_num,int loop_num);
+int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array& array);
 
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print code
-	code(ast->right->right,symbolTable,0);
+	code(ast->right->right,symbolTable,0,None);
 }
-void code(AST* head, SymbolTable& table,int loop_num) //gets StatementList
+void code(AST* head, SymbolTable& table,int loop_num,ControlScope scope) //gets StatementList
 {
 	if (head == nullptr)
 	{
@@ -217,15 +218,15 @@ void code(AST* head, SymbolTable& table,int loop_num) //gets StatementList
 	}
 
 	if (head->left != nullptr)
-		code(head->left, table,loop_num);
-	execute_code(head->right, table,loop_num);
+		code(head->left, table,loop_num,scope);
+	execute_code(head->right, table,loop_num,scope);
 
 }
 #define data head->value
 int label_num = 0;
 
 
-void execute_code(AST* head, SymbolTable& table,int loop_num)
+void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 {
 
 	if (data == "if" && head->right->value == "else")
@@ -235,10 +236,10 @@ void execute_code(AST* head, SymbolTable& table,int loop_num)
 		load_expression(head->left,table);
 		head = head->right;//jump to else node
 		cout << "fjp skip_if_" << if_label_num << endl;
-		code(head->left,table,loop_num);
+		code(head->left,table,else_label_num,scope);
 		cout << "ujp skip_else_" << else_label_num << endl;
 		cout << "skip_if_" << if_label_num << ':' << endl;
-		code(head->right, table,loop_num);
+		code(head->right, table,else_label_num,scope);
 		cout << "skip_else_" << else_label_num << ':' << endl;
 	}
 
@@ -247,7 +248,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num)
 		int la = label_num++;
 		load_expression(head->left, table);
 		cout << "fjp " <<  "skip_if_" << la << endl;
-		code(head->right, table,loop_num);
+		code(head->right, table,la,scope);
 		cout << "skip_if_" << la << ':' << endl;
 
 	}
@@ -258,7 +259,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num)
 		cout << "while_" << loop << ':' << endl;
 		load_expression(head->left, table);
 		cout << "fjp " << "while_out_" << after_loop  << endl;
-		code(head->right, table, after_loop);
+		code(head->right, table, after_loop,While);
 		cout << "ujp " << "while_" << loop << endl;
 		cout << "while_out_" << after_loop << ':' << endl;
 
@@ -270,7 +271,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num)
 		load_expression(head->left,table);
 		cout << "neg" << endl;
 		cout << "ixj switch_end_" << switch_num << endl;
-		int number_of_cases = generate_cases(head->right,table,switch_num,loop_num);
+		int number_of_cases = generate_cases(head->right,table,switch_num);
 		for(;number_of_cases>0;number_of_cases--)
 		{
 			cout << "ujp case_" << switch_num << '_' << number_of_cases << endl;
@@ -292,7 +293,11 @@ void execute_code(AST* head, SymbolTable& table,int loop_num)
 	}
 	if(data == "break")
 	{
-		cout << "ujp while_out_" << loop_num << endl;
+		switch(scope)
+		{
+			case While: cout << "ujp while_out_" << loop_num << endl;break;
+			case Switch:cout << "ujp switch_end_" << loop_num << endl; break;
+		}
 	}
 }
 
@@ -386,16 +391,16 @@ void access_shift(AST* indexList, SymbolTable& table,const Array& array)
 	cout << "dec " << array.subpart << endl;
 
 }
-int generate_cases(AST* head, SymbolTable& table,int switch_num,int loop_num)
+int generate_cases(AST* head, SymbolTable& table,int switch_num)
 {
 	int number_of_cases;
 	if(head->left != nullptr)
-		number_of_cases = generate_cases(head->left,table,switch_num,loop_num) + 1;
+		number_of_cases = generate_cases(head->left,table,switch_num) + 1;
 	else
 		number_of_cases = 1;
 	AST* case_node = head->right;
 	cout << "case_" << switch_num << '_' <<  case_node->left->left->value << ':' << endl;//case->constInt->value
-	code(case_node->right,table,loop_num);
+	code(case_node->right,table,switch_num,Switch);
 	cout << "ujp switch_end_" << switch_num << endl;
 	return number_of_cases;
 }
