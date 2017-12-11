@@ -248,7 +248,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 		int la = label_num++;
 		load_expression(head->left, table);
 		cout << "fjp " <<  "skip_if_" << la << endl;
-		code(head->right, table,la,scope);
+		code(head->right, table,loop_num,scope);
 		cout << "skip_if_" << la << ':' << endl;
 
 	}
@@ -266,7 +266,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 	}
 	if(data == "switch")
 	{
-		static int global_switch_num = 0;
+		int global_switch_num = label_num;
 		int switch_num = global_switch_num++;
 		load_expression(head->left,table);
 		cout << "neg" << endl;
