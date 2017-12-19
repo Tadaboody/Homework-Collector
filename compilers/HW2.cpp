@@ -132,7 +132,7 @@ public:
 	{	}
 
 	Variable& operator[](string name) {return *this->variable_table[name];}
-	const Variable& get_variable(const string& name);
+	const Variable* get_variable(const string& name);
 	static SymbolTable generateSymbolTable(AST* tree); 
 	map<string,int> size_table = 
 	{
@@ -148,6 +148,14 @@ public:
 	// 	//https://stackoverflow.com/questions/3639741/merge-two-stl-maps
 	// 	// variable_table.insert(other_table.variable_table.begin(),other_table.variable_table.end());//map::merge is c++17 https://stackoverflow.com/questions/3639741/merge-two-stl-maps
 	// }
+};
+class FunVar : public Variable
+{
+	public:
+	const Function* static_link;
+	FunVar(address open_address, string type,int size,int offset,const Function* static_link):Variable(open_address,type,size,offset),static_link(static_link)
+	{}
+
 };
 class Function {//the function you declare, not the one you pass as a var
 private:
@@ -167,20 +175,29 @@ public:
 	void print_body();
 	const inline int stack_pointer() const {return table.free_address;}
 	const inline int argument_size() const {return arguments.free_address - 5;}
-	const Function* find_function(const string& name) const;
+	const Function* find_function(const string& name) ;
 	inline string function_label() const {return toupper(name);}
 	// void createCall();
 };
-const Function* Function::find_function(const string& name)const
+const Function* Function::find_function(const string& name)
 {
 	if(name == this->name)
 		return this;
+	const Variable* var = table.get_variable(name);
+	const FunVar* fun = dynamic_cast<const FunVar*>(var);
+	if(fun != nullptr)
+	{
+		return fun->static_link;
+	}
 	for(Function* fun:children)
 	{
 		if(name == fun->name)
 			return fun;
 	}
-	return static_link->find_function(name);
+	if(static_link !=nullptr)
+		return static_link->find_function(name);
+	else
+		return nullptr;
 }
 SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 		// TODO: create SymbolTable from AST
@@ -200,7 +217,12 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 		address var_address = table.free_address;
 		int offset = var_address - scope_base;
 		Variable* new_var;
-		if(type=="array")
+		if(type=="identifier")
+		{
+			new_var = new FunVar(var_address,type,2,offset,table.owner->find_function(var->right->left->value));
+			FunVar * fun = dynamic_cast<FunVar*>(new_var);
+		}
+		else if(type=="array")
 		{
 			string member_type = var->right->right->value;
 			if(member_type == "identifier")
@@ -274,30 +296,30 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 	AST* content = function_head->right;
 	statementsListHead = content->right;
 	AST* scope = content->left;
-	if(parameters_list != nullptr && scope == nullptr)
+	if(parameters_list != nullptr)
 	{
 		SymbolTable::fillSymbolTable(arguments,parameters_list);
-		SymbolTable::fillSymbolTable(table,parameters_list);//is fine because I never use the size of this table, just the argument table
+		SymbolTable::fillSymbolTable(table,parameters_list);
 		//arguments
 	}
 	if(scope != nullptr){
 		if(scope->left!=nullptr)
 			SymbolTable::fillSymbolTable(table,scope->left);
-		if(parameters_list != nullptr)
-		{
-			SymbolTable::fillSymbolTable(arguments,parameters_list);
-			SymbolTable::fillSymbolTable(table,parameters_list);//is fine because I never use the size of this table, just the argument table
-			//arguments
-		}
 		// if(function_head->value == "function")
 		// {
 			//create a fake node for the return value,insert it into the table and 
 		// 	table.insert()
 		// }
+		stack<AST*> backtrace = stack<AST*>();
 		for(AST* functionsList = scope->right;functionsList!=nullptr;functionsList=functionsList->left)
 		{
-			children.push_back(new Function(functionsList->right,this));
+			backtrace.push(functionsList);
 		}
+		for(AST* functionsList=backtrace.top();!backtrace.empty(); backtrace.pop())
+	{
+		functionsList = backtrace.top();
+		children.push_back(new Function(functionsList->right,this));
+	}
 	}
 	if(fun_type == "function")
 	{
@@ -331,14 +353,15 @@ void Function::print_decleration()
 	{
 		fun->print_decleration();
 	}
+	print_body();
 }
 
 void Function::print_body()
 {
-	for(Function* fun:children)
-	{
-		fun->print_body();
-	}	
+	// for(Function* fun:children)
+	// {
+	// 	fun->print_body();
+	// }	
 	cout << function_label() << "_begin:" << endl;
 	code(statementsListHead,table,0,None);
 	map<string,string> stop = {
@@ -348,10 +371,11 @@ void Function::print_body()
 		};
 	cout << stop[fun_type] << endl;
 }
-	const Variable& SymbolTable::get_variable(const string& name) {
+	const Variable* SymbolTable::get_variable(const string& name) {
 		if(variable_table.find(name) != variable_table.end()){
-			return *this->variable_table[name];
+			return this->variable_table[name];
 		}else{
+			if(owner->static_link == nullptr){return nullptr;}
 			return owner->static_link->table.get_variable(name);
 		}
 	
@@ -360,7 +384,7 @@ void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print cod
 	Function* main = symbolTable.owner;
 	main->print_decleration();
-	main->print_body();
+	// main->print_body();
 }
 void code(AST* head, SymbolTable& table,int loop_num,ControlScope scope) //gets StatementList
 {
@@ -460,7 +484,7 @@ void call_function(AST* call, SymbolTable& table)
 	string fun_id = call->left->left->value;
 	Function* caller = table.owner;
 	const Function* callee  = caller->find_function(fun_id);
-	cout << "mst " << table.owner->depth << endl;
+	cout << "mst " << callee->depth  - 1 - table.owner->depth << endl;
 
 	{//inline load arguments
 		AST* argument_list = call->right;
@@ -474,7 +498,7 @@ void call_function(AST* call, SymbolTable& table)
 			}
 			if(var->argument_type == "byValue")
 			{
-				if(var->type == "array" || var->type == "record"){
+				if(var->size > 1){
 					load_variable(argument_list->right, table);
 					cout << "movs " << var->size << endl;
 				}
@@ -540,9 +564,15 @@ void load_expression(AST* head, SymbolTable& table)
 string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TODO: put pointer/struct access here
 {
 	if(data == "identifier"){
-		const Variable& var = table.get_variable(head->left->value);
-		by_ref = var.argument_type == "byReference";
-		cout << "lda " << var.depth - table.owner->depth  << ' ' <<var.var_address << endl;
+		const Function* fun = table.owner->find_function(head->left->value);
+		if(fun!=nullptr)
+		{
+			cout << "ldc " << fun->function_label() << endl;
+			return "";
+		}
+		const Variable* var = table.get_variable(head->left->value);
+		by_ref = var->argument_type == "byReference";
+		cout << "lda " << table.owner->depth - var->depth << ' ' <<var->var_address << endl;
 		return head->left->value;
 	}
 	else if(data == "pointer")
