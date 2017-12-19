@@ -386,33 +386,33 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 		int else_label_num = label_num++;
 		load_expression(head->left,table);
 		head = head->right;//jump to else node
-		cout << "fjp skip_if_" << if_label_num << endl;
+		cout << "fjp L" << if_label_num << endl;
 		code(head->left,table,else_label_num,scope);
-		cout << "ujp skip_else_" << else_label_num << endl;
-		cout << "skip_if_" << if_label_num << ':' << endl;
+		cout << "ujp L" << else_label_num << endl;
+		cout << "L" << if_label_num << ':' << endl;
 		code(head->right, table,else_label_num,scope);
-		cout << "skip_else_" << else_label_num << ':' << endl;
+		cout << "L" << else_label_num << ':' << endl;
 	}
 
 	else if (data == "if")
 	{
 		int la = label_num++;
 		load_expression(head->left, table);
-		cout << "fjp " <<  "skip_if_" << la << endl;
+		cout << "fjp " <<  "L" << la << endl;
 		code(head->right, table,loop_num,scope);
-		cout << "skip_if_" << la << ':' << endl;
+		cout << "L" << la << ':' << endl;
 
 	}
 	if (data == "while")
 	{
 		int loop = label_num++;
 		int after_loop = label_num++;
-		cout << "while_" << loop << ':' << endl;
+		cout << "L" << loop << ':' << endl;
 		load_expression(head->left, table);
-		cout << "fjp " << "while_out_" << after_loop  << endl;
+		cout << "fjp " << "L" << after_loop  << endl;
 		code(head->right, table, after_loop,While);
-		cout << "ujp " << "while_" << loop << endl;
-		cout << "while_out_" << after_loop << ':' << endl;
+		cout << "ujp " << "L" << loop << endl;
+		cout << "L" << after_loop << ':' << endl;
 
 	}
 	if(data == "switch")
