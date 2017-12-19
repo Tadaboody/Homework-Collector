@@ -25,6 +25,7 @@ void load_expression(AST * head, SymbolTable & table);
 string load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array& array);
+void call_function(AST* call,SymbolTable& table);
 string toupper(const string& str);
 class AST
 {
@@ -150,7 +151,7 @@ public:
 };
 class Function {//the function you declare, not the one you pass as a var
 private:
-int find_extreme_pointer();
+int find_extreme_pointer(AST* statementsListHead,bool start);
 public:
 	int depth;
 	string fun_type;
@@ -228,21 +229,40 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 		{
 			new_var = new Variable(table.free_address,type,table.size_table[type],offset);
 		}
+		if(identifier==table.owner->name)
+		{
+			new_var->var_address = 0;
+		}
 		new_var->argument_type = var->value;//"var","byValue","byReference". quick fix so I don't change constructor. shows that I needed a factory all the while
 		new_var->depth = table.owner->depth;
 		table.variable_table[identifier] = (new_var);
-		table.free_address += type=="record"?0:table[identifier].size;
+		table.free_address += type=="record"||identifier==table.owner->name?0:table[identifier].size;
 		table.size_table[identifier] = table[identifier].size;
+
 		return table[identifier].size+scope_size;
 	}
-int Function::find_extreme_pointer()
+	inline int max(int a, int b)
+	{
+		return a>b?a:b;
+	}
+int Function::find_extreme_pointer(AST* statementsList=nullptr,bool start=true)
 {
-	return 1;
+	int ret = 0;
+	if(start) statementsList = statementsListHead;
+	if(statementsList == nullptr)
+		return ret;
+	AST* stat = statementsList->right;
+	if(stat->value == "assignment")
+	{
+		ret = 2;
+	}
+	return max(ret,find_extreme_pointer(statementsList->left,false));
 }
 Function::Function(AST* function_head,Function* static_link):table(this),arguments(this),depth(0),fun_type(function_head->value)
 {
 	AST* id_and_parameters = function_head->left;
-	AST* parameters_list = id_and_parameters->right->left;
+	AST* inOutParameters = id_and_parameters->right;
+	AST* parameters_list = inOutParameters->left;
 	name = id_and_parameters->left->left->value;
 	this->static_link = static_link;
 	table = SymbolTable(this);
@@ -261,6 +281,7 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 		//arguments
 	}
 	if(scope != nullptr){
+		if(scope->left!=nullptr)
 			SymbolTable::fillSymbolTable(table,scope->left);
 		if(parameters_list != nullptr)
 		{
@@ -277,6 +298,14 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 		{
 			children.push_back(new Function(functionsList->right,this));
 		}
+	}
+	if(fun_type == "function")
+	{
+		string type = inOutParameters->right->value;
+		AST* declarationsList = new AST("declarationsList",new AST("var",new AST(type,nullptr,nullptr)
+		,new AST("identifier",nullptr,new AST(name,nullptr,nullptr))),nullptr);
+		SymbolTable::fillSymbolTable(table,declarationsList);
+		delete declarationsList;
 	}
 
 }
@@ -423,36 +452,39 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 	}
 	if(data == "call")
 	{
-		string fun_id = head->left->left->value;
-		Function* caller = table.owner;
-		const Function* callee  = caller->find_function(fun_id);
-		cout << "mst " << table.owner->depth << endl;
-
-		{//inline load arguments
-			AST* argument_list = head->right;
-			map<string,Variable*> args = callee->arguments.variable_table;
-			for(pair<const string,Variable*>& arg:args)
-			{
-				Variable* var = arg.second;
-				if(var->argument_type == "byReference")
-				{
-					load_variable(argument_list->right,table);
-				}
-				if(var->argument_type == "byValue")
-				{
-					if(var->type == "array" || var->type == "record"){
-						load_variable(argument_list->right, table);
-						cout << "movs " << var->size << endl;
-					}
-					else
-						load_expression(argument_list->right,table);
-				}
-				argument_list = argument_list->left;
-			}
-		}
-		cout << "cup " << callee->argument_size() << ' ' << callee->function_label() << endl;
-		
+		call_function(head,table);
 	}
+}
+void call_function(AST* call, SymbolTable& table)
+{
+	string fun_id = call->left->left->value;
+	Function* caller = table.owner;
+	const Function* callee  = caller->find_function(fun_id);
+	cout << "mst " << table.owner->depth << endl;
+
+	{//inline load arguments
+		AST* argument_list = call->right;
+		map<string,Variable*> args = callee->arguments.variable_table;
+		for(pair<const string,Variable*>& arg:args)
+		{
+			Variable* var = arg.second;
+			if(var->argument_type == "byReference")
+			{
+				load_variable(argument_list->right,table);
+			}
+			if(var->argument_type == "byValue")
+			{
+				if(var->type == "array" || var->type == "record"){
+					load_variable(argument_list->right, table);
+					cout << "movs " << var->size << endl;
+				}
+				else
+					load_expression(argument_list->right,table);
+			}
+			argument_list = argument_list->left;
+		}
+	}
+	cout << "cup " << callee->argument_size() << ' ' << callee->function_label() << endl;
 }
 
 void load_expression(AST* head, SymbolTable& table)
@@ -495,6 +527,10 @@ void load_expression(AST* head, SymbolTable& table)
 		if(head->right != nullptr) // binary operator
 			load_expression(head->right, table);
 		cout << operators[data] << endl;
+	}
+	if(data == "call")
+	{
+		call_function(head,table);
 	}
 
 }
