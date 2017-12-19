@@ -25,7 +25,7 @@ void load_expression(AST * head, SymbolTable & table);
 string load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array& array);
-
+string toupper(const string& str);
 class AST
 {
 public:
@@ -62,7 +62,8 @@ public:
 	address var_address;
 	size_t size;
 	int offset;
-	string passing_type;
+	string argument_type;
+	int depth;
 	Variable() {}
 	Variable(address open_address, string type,int size,int offset):
 	var_address(open_address),type(type),offset(offset)
@@ -125,10 +126,12 @@ class SymbolTable {
 public:
 	address free_address;
 	map<string, Variable*> variable_table;
-	Function* pred_tree;
-	SymbolTable(Function* owner):free_address(5),pred_tree(owner)
+	Function* owner;
+	SymbolTable(Function* owner):free_address(5),owner(owner)
 	{	}
-	Variable& operator[](string name) { return *this->variable_table[name]; }
+
+	Variable& operator[](string name) {return *this->variable_table[name];}
+	const Variable& get_variable(const string& name);
 	static SymbolTable generateSymbolTable(AST* tree); 
 	map<string,int> size_table = 
 	{
@@ -138,7 +141,52 @@ public:
 		{"pointer",1}
 	};
 
-	static int fillSymbolTable(SymbolTable& table, AST* head,address scope_base=0)
+	static int fillSymbolTable(SymbolTable& table, AST* head,address scope_base);
+	// void merge(const SymbolTable& other_table) doesn't work because you can't copy unique pointers in copy constructors.
+	// {
+	// 	//https://stackoverflow.com/questions/3639741/merge-two-stl-maps
+	// 	// variable_table.insert(other_table.variable_table.begin(),other_table.variable_table.end());//map::merge is c++17 https://stackoverflow.com/questions/3639741/merge-two-stl-maps
+	// }
+};
+class Function {//the function you declare, not the one you pass as a var
+private:
+int find_extreme_pointer();
+public:
+	int depth;
+	string fun_type;
+	Function(AST* function_head,Function* static_link);
+	Function* static_link;
+	vector<Function*> children;
+	enum ArgumentType{ByValue,ByReference};
+	string name;
+	SymbolTable table;
+	SymbolTable arguments;
+	AST* statementsListHead;
+	void print_decleration();
+	void print_body();
+	const inline int stack_pointer() const {return table.free_address;}
+	const inline int argument_size() const {return arguments.free_address - 5;}
+	const Function* find_function(const string& name) const;
+	inline string function_label() const {return toupper(name);}
+	// void createCall();
+};
+const Function* Function::find_function(const string& name)const
+{
+	if(name == this->name)
+		return this;
+	for(Function* fun:children)
+	{
+		if(name == fun->name)
+			return fun;
+	}
+	return static_link->find_function(name);
+}
+SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
+		// TODO: create SymbolTable from AST
+		Function* main = new Function(tree,nullptr);
+		return main->table;
+	}
+	int SymbolTable::fillSymbolTable(SymbolTable& table, AST* head,address scope_base=0)
 	{
 		int scope_size = 0;
 		if (head->left != nullptr)
@@ -180,44 +228,18 @@ public:
 		{
 			new_var = new Variable(table.free_address,type,table.size_table[type],offset);
 		}
-		new_var->passing_type = var->value;//"var","byValue","byReference". quick fix so I don't change constructor. shows that I needed a factory all the while
+		new_var->argument_type = var->value;//"var","byValue","byReference". quick fix so I don't change constructor. shows that I needed a factory all the while
+		new_var->depth = table.owner->depth;
 		table.variable_table[identifier] = (new_var);
 		table.free_address += type=="record"?0:table[identifier].size;
 		table.size_table[identifier] = table[identifier].size;
 		return table[identifier].size+scope_size;
 	}
-	// void merge(const SymbolTable& other_table) doesn't work because you can't copy unique pointers in copy constructors.
-	// {
-	// 	//https://stackoverflow.com/questions/3639741/merge-two-stl-maps
-	// 	// variable_table.insert(other_table.variable_table.begin(),other_table.variable_table.end());//map::merge is c++17 https://stackoverflow.com/questions/3639741/merge-two-stl-maps
-	// }
-};
-class Function {//the function you declare, not the one you pass as a var
-private:
-int find_extreme_pointer();
-public:
-	Function(AST* function_head,Function* static_link);
-	Function* static_link;
-	vector<Function*> children;
-	enum ArgumentType{ByValue,ByReference};
-	string name;
-	SymbolTable table;
-	SymbolTable arguments;
-	AST* statementsListHead;
-	void print_decleration();
-	void print_body();
-	// void createCall();
-};
-SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
-		// TODO: create SymbolTable from AST
-		Function* main = new Function(tree,nullptr);
-		return main->table;
-	}
 int Function::find_extreme_pointer()
 {
 	return 1;
 }
-Function::Function(AST* function_head,Function* static_link):table(this),arguments(this)
+Function::Function(AST* function_head,Function* static_link):table(this),arguments(this),depth(0),fun_type(function_head->value)
 {
 	AST* id_and_parameters = function_head->left;
 	AST* parameters_list = id_and_parameters->right->left;
@@ -227,29 +249,36 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 	if(static_link != nullptr){
 		table.size_table = static_link->table.size_table;//"inherit" types
 		arguments.size_table = table.size_table;
+		depth = static_link->depth+1;
 	}
 	AST* content = function_head->right;
 	statementsListHead = content->right;
 	AST* scope = content->left;
-	if(scope != nullptr){
-		SymbolTable::fillSymbolTable(table,scope->left);
-	if(parameters_list != nullptr)
+	if(parameters_list != nullptr && scope == nullptr)
 	{
 		SymbolTable::fillSymbolTable(arguments,parameters_list);
 		SymbolTable::fillSymbolTable(table,parameters_list);//is fine because I never use the size of this table, just the argument table
 		//arguments
 	}
-	// if(function_head->value == "function")
-	// {
-		//create a fake node for the return value,insert it into the table and 
-	// 	table.insert()
-	// }
-	AST* functionsList = scope->right;
-	for(AST* functionsList = scope->right;functionsList!=nullptr;functionsList=functionsList->left)
-	{
-		children.push_back(new Function(functionsList->right,this));
+	if(scope != nullptr){
+			SymbolTable::fillSymbolTable(table,scope->left);
+		if(parameters_list != nullptr)
+		{
+			SymbolTable::fillSymbolTable(arguments,parameters_list);
+			SymbolTable::fillSymbolTable(table,parameters_list);//is fine because I never use the size of this table, just the argument table
+			//arguments
+		}
+		// if(function_head->value == "function")
+		// {
+			//create a fake node for the return value,insert it into the table and 
+		// 	table.insert()
+		// }
+		for(AST* functionsList = scope->right;functionsList!=nullptr;functionsList=functionsList->left)
+		{
+			children.push_back(new Function(functionsList->right,this));
+		}
 	}
-}
+
 }
 
 string toupper(const string& str)
@@ -263,9 +292,9 @@ string toupper(const string& str)
 
 void Function::print_decleration()
 {
-	int sp = arguments.free_address;
+	int sp = stack_pointer();
 	int ep = find_extreme_pointer();
-	cout << toupper(name) << ":" << endl;
+	cout << function_label() << ":" << endl;
 	cout << "ssp " << sp << endl;
 	cout << "sep " << ep << endl;
 	cout << "ujp " << toupper(name) << "_begin" << endl;
@@ -277,16 +306,30 @@ void Function::print_decleration()
 
 void Function::print_body()
 {
-	cout << toupper(name) << "_begin:" << endl;
-	
 	for(Function* fun:children)
 	{
 		fun->print_body();
 	}	
+	cout << function_label() << "_begin:" << endl;
+	code(statementsListHead,table,0,None);
+	map<string,string> stop = {
+		{"program","stp"},
+		{"function","retf"},
+		{"procedure","retp"}
+		};
+	cout << stop[fun_type] << endl;
 }
+	const Variable& SymbolTable::get_variable(const string& name) {
+		if(variable_table.find(name) != variable_table.end()){
+			return *this->variable_table[name];
+		}else{
+			return owner->static_link->table.get_variable(name);
+		}
+	
+	}
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
 	// TODO: go over AST and print cod
-	Function* main = symbolTable.pred_tree;
+	Function* main = symbolTable.owner;
 	main->print_decleration();
 	main->print_body();
 }
@@ -378,6 +421,38 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 			case Switch:cout << "ujp switch_end_" << loop_num << endl; break;
 		}
 	}
+	if(data == "call")
+	{
+		string fun_id = head->left->left->value;
+		Function* caller = table.owner;
+		const Function* callee  = caller->find_function(fun_id);
+		cout << "mst " << table.owner->depth << endl;
+
+		{//inline load arguments
+			AST* argument_list = head->right;
+			map<string,Variable*> args = callee->arguments.variable_table;
+			for(pair<const string,Variable*>& arg:args)
+			{
+				Variable* var = arg.second;
+				if(var->argument_type == "byReference")
+				{
+					load_variable(argument_list->right,table);
+				}
+				if(var->argument_type == "byValue")
+				{
+					if(var->type == "array" || var->type == "record"){
+						load_variable(argument_list->right, table);
+						cout << "movs " << var->size << endl;
+					}
+					else
+						load_expression(argument_list->right,table);
+				}
+				argument_list = argument_list->left;
+			}
+		}
+		cout << "cup " << callee->argument_size() << ' ' << callee->function_label() << endl;
+		
+	}
 }
 
 void load_expression(AST* head, SymbolTable& table)
@@ -427,7 +502,8 @@ void load_expression(AST* head, SymbolTable& table)
 string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
 {
 	if(data == "identifier"){
-		cout << "ldc " << table[head->left->value].var_address << endl;
+		const Variable& var = table.get_variable(head->left->value);
+		cout << "lda " << var.depth - table.owner->depth  << ' ' <<var.var_address << endl;
 		return head->left->value;
 	}
 	else if(data == "pointer")
