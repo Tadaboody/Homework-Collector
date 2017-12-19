@@ -22,7 +22,7 @@ void generatePCode(AST * ast, SymbolTable & symbolTable);
 void code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
 void execute_code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
 void load_expression(AST * head, SymbolTable & table);
-string load_variable(AST * head, SymbolTable & table);
+void load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array& array);
 void call_function(AST* call,SymbolTable& table);
@@ -535,34 +535,47 @@ void load_expression(AST* head, SymbolTable& table)
 
 }
 //codel
-string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
+
+
+string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TODO: put pointer/struct access here
 {
 	if(data == "identifier"){
 		const Variable& var = table.get_variable(head->left->value);
+		by_ref = var.argument_type == "byReference";
 		cout << "lda " << var.depth - table.owner->depth  << ' ' <<var.var_address << endl;
 		return head->left->value;
 	}
 	else if(data == "pointer")
 	{
-		string type = load_variable(head->left,table);
+		string type = load_variable_unwrapped(head->left,table,by_ref);
 		cout << "ind" << endl;
 		return dynamic_cast<Pointer&>(table[type]).member_type;
 	}else if(data == "array")
 	{
-		string type = load_variable(head->left,table);
+		string type = load_variable_unwrapped(head->left,table,by_ref);
 		// string identifier = head-
 		const Array& array = dynamic_cast<Array&>(table[type]);
 		access_shift(head->right,table,array);
 		return array.member_type;
 	}else if(data=="record")
 	{
-		string type = load_variable(head->left,table);
+		string type = load_variable_unwrapped(head->left,table,by_ref);
 		string member_type = head->right->left->value;
 		cout << "inc " << table[member_type].offset << endl;
 		return member_type;
 	}
 	return "Shouldn't get here";
 }
+
+void load_variable(AST* head, SymbolTable& table){//wrapper function for byval vs byref
+	bool by_ref = false;
+	load_variable_unwrapped(head,table,by_ref);
+	if(by_ref)
+	{
+		cout << "ind" << endl;
+	}
+}
+
 //codei
 void access_shift(AST* indexList, SymbolTable& table,const Array& array)
 {
