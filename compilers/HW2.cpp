@@ -490,9 +490,15 @@ void load_args(AST* argument_list,SymbolTable& table,const Function* callee)
 			}
 			if(var->argument_type == "byValue")
 			{
-				if(var->size > 1){
+				if (var->size > 1)
+				{
 					load_variable(argument_list->right, table);
-					cout << "movs " << var->size << endl;
+					FunVar* fun = dynamic_cast<FunVar*>(var);
+					if (fun != nullptr)
+					{
+						cout << "lda " << fun->static_link->depth -1 -table.owner->depth << " 0" << endl;
+					}else
+						cout << "movs " << var->size << endl;
 				}
 				else
 					load_expression(argument_list->right,table);
