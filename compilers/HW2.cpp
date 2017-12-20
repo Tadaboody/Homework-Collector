@@ -59,15 +59,15 @@ typedef string types;
 typedef int address;
 class Variable {
 public:
-	string type;
 	address var_address;
 	size_t size;
 	int offset;
-	string argument_type;
 	int depth;
+	string type;
+	string argument_type;
 	Variable() {}
 	Variable(address open_address, string type,int size,int offset):
-	var_address(open_address),type(type),offset(offset)
+	var_address(open_address),offset(offset), type(type)
 	{
 		this->var_address = open_address;
 		this->type = type;
@@ -155,12 +155,13 @@ class FunVar : public Variable
 	const Function* static_link;
 	FunVar(address open_address, string type,int size,int offset,const Function* static_link):Variable(open_address,type,size,offset),static_link(static_link)
 	{}
-
 };
 class Function {//the function you declare, not the one you pass as a var
 private:
 int find_extreme_pointer(AST* statementsListHead,bool start);
 public:
+	SymbolTable table;
+	SymbolTable arguments;
 	int depth;
 	string fun_type;
 	Function(AST* function_head,Function* static_link);
@@ -168,8 +169,6 @@ public:
 	vector<Function*> children;
 	enum ArgumentType{ByValue,ByReference};
 	string name;
-	SymbolTable table;
-	SymbolTable arguments;
 	AST* statementsListHead;
 	void print_decleration();
 	void print_body();
@@ -220,7 +219,6 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 		if(type=="identifier")
 		{
 			new_var = new FunVar(var_address,type,2,offset,table.owner->find_function(var->right->left->value));
-			FunVar * fun = dynamic_cast<FunVar*>(new_var);
 		}
 		else if(type=="array")
 		{
@@ -472,6 +470,7 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 		{
 			case While: cout << "ujp while_out_" << loop_num << endl;break;
 			case Switch:cout << "ujp switch_end_" << loop_num << endl; break;
+			case None:cout << "Unbreakable" << endl;break;
 		}
 	}
 	if(data == "call")
@@ -479,21 +478,14 @@ void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
 		call_function(head,table);
 	}
 }
-void call_function(AST* call, SymbolTable& table)
-{
-	string fun_id = call->left->left->value;
-	Function* caller = table.owner;
-	const Function* callee  = caller->find_function(fun_id);
-	cout << "mst " << callee->depth  - 1 - table.owner->depth << endl;
 
-	{//inline load arguments
-		AST* argument_list = call->right;
+void load_args(AST* argument_list,SymbolTable& table,const Function* callee)
+{
 		map<string,Variable*> args = callee->arguments.variable_table;
 		for(pair<const string,Variable*>& arg:args)
 		{
 			Variable* var = arg.second;
-			if(var->argument_type == "byReference")
-			{
+			if(var->argument_type == "byReference"){
 				load_variable(argument_list->right,table);
 			}
 			if(var->argument_type == "byValue")
@@ -507,8 +499,26 @@ void call_function(AST* call, SymbolTable& table)
 			}
 			argument_list = argument_list->left;
 		}
-	}
+}
+
+void call_function(AST* call, SymbolTable& table)
+{
+	string fun_id = call->left->left->value;
+	Function* caller = table.owner;
+	const FunVar* function_variable = dynamic_cast<const FunVar*>(table.get_variable(fun_id));
+	if(function_variable != nullptr)
+	{
+		const Function* callee = function_variable->static_link; 
+		cout << "mstf " << caller->depth - function_variable->depth << " " << function_variable->var_address << endl;
+		load_args(call->right,table, function_variable->static_link);
+		cout << "smp " << callee->argument_size() << endl;
+		cout << "cupi " << caller->depth - function_variable->depth << " " << function_variable->var_address << endl;
+	}else{
+	const Function* callee  = caller->find_function(fun_id);
+	cout << "mst " << callee->depth  - 1 - table.owner->depth << endl;
+	load_args(call->right,table,callee);
 	cout << "cup " << callee->argument_size() << ' ' << callee->function_label() << endl;
+	}
 }
 
 void load_expression(AST* head, SymbolTable& table)
@@ -583,7 +593,6 @@ string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TOD
 	}else if(data == "array")
 	{
 		string type = load_variable_unwrapped(head->left,table,by_ref);
-		// string identifier = head-
 		const Array& array = dynamic_cast<Array&>(table[type]);
 		access_shift(head->right,table,array);
 		return array.member_type;
