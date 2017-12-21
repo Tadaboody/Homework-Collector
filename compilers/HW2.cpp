@@ -132,7 +132,6 @@ public:
 	Function* owner;
 	SymbolTable(Function* owner):free_address(5),owner(owner)
 	{	}
-
 	Variable& operator[](string name) {return *this->variable_table[name];}
 	const Variable* get_variable(const string& name);
 	static SymbolTable generateSymbolTable(AST* tree); 
@@ -281,16 +280,47 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 int Function::find_extreme_pointer(AST* statementsList=nullptr,bool start=true)
 {
 	int ret = 0;
-	if(start) statementsList = statementsListHead;
-	if(statementsList == nullptr)
-		return ret;
-	AST* stat = statementsList->right;
-	if(stat->value == "assignment")
+	map<string,int> command_known =
+	{
+		{"ldc",1},
+		{"sub",-2},
+		{"add",-2},
+		{"div",-2},
+		{"mul",-1},
+		{"and",-1},
+		{"neg",0},
+		{"not",0},
+		{"geq",-1},
+		{"leq",-1},
+		{"equ",-1},
+		{"neq",-1},
+		{"ujp",0},
+		{"fjp",-1},
+		{"ixj",-1},
+		{"print",-1},
+		{"ind",0},
+		{"lda",1},
+		{"inc",0},
+		{"dec",0},
+		{"ixa",0}
+	};
+	ifstream output;
+	//cout into output
+	code(statementsListHead,table,0,None);
+	string line;
+	while(getline(output,line))
+	{
+		string command = line.substr(line.find_first_of(' '));//str.split()
+		if(command_known.find(command) != command_known.end())
+		{
+			ret+=command_known[command];
+		}else
 	{
 		ret = 2;
 	}
 	return max(ret,find_extreme_pointer(statementsList->left,false));
 }
+
 Function::Function(AST* function_head,Function* static_link):table(this),arguments(this),depth(0),fun_type(function_head->value)
 {
 	AST* id_and_parameters = function_head->left;
@@ -326,9 +356,9 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 		{
 			backtrace.push(functionsList);
 		}
-		for(AST* functionsList=backtrace.top();!backtrace.empty(); backtrace.pop())
+		for(;!backtrace.empty(); backtrace.pop())
 	{
-		functionsList = backtrace.top();
+		AST* functionsList = backtrace.top();
 		children.push_back(new Function(functionsList->right,this));
 	}
 	}
