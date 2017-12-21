@@ -16,6 +16,7 @@ class AST;
 class Variable;
 class Array;
 class Pointer;
+class FunVar;
 // Abstract Syntax Tree
 #define data head->value
 enum ControlScope{While,Switch,None};
@@ -28,6 +29,7 @@ int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array* array);
 void call_function(AST* call,SymbolTable& table);
 string toupper(const string& str);
+int label_num = 0;
 
 class AST
 {
@@ -144,12 +146,21 @@ public:
 	};
 
 	static int fillSymbolTable(SymbolTable& table, AST* head,address scope_base);
+	const Variable* get_variable(int address);
 	// void merge(const SymbolTable& other_table) doesn't work because you can't copy unique pointers in copy constructors.
 	// {
 	// 	//https://stackoverflow.com/questions/3639741/merge-two-stl-maps
 	// 	// variable_table.insert(other_table.variable_table.begin(),other_table.variable_table.end());//map::merge is c++17 https://stackoverflow.com/questions/3639741/merge-two-stl-maps
 	// }
 };
+const Variable* SymbolTable::get_variable(int address)
+{
+	for (pair<string, Variable *> var : variable_table)
+	{
+		if (var.second->var_address == address)
+			return var.second;
+	}
+}
 class FunVar : public Variable
 {
 	public:
@@ -159,7 +170,7 @@ class FunVar : public Variable
 };
 class Function {//the function you declare, not the one you pass as a var
 private:
-int find_extreme_pointer(AST* statementsListHead,bool start);
+  int find_extreme_pointer();
 public:
 	SymbolTable table;
 	SymbolTable arguments;
@@ -277,99 +288,150 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 	{
 		return a>b?a:b;
 	}
-int Function::find_extreme_pointer(AST* statementsList=nullptr,bool start=true)
-{
-	int ret = 0;
-	map<string,int> command_known =
-	{
-		{"ldc",1},
-		{"sub",-2},
-		{"add",-2},
-		{"div",-2},
-		{"mul",-1},
-		{"and",-1},
-		{"neg",0},
-		{"not",0},
-		{"geq",-1},
-		{"leq",-1},
-		{"equ",-1},
-		{"neq",-1},
-		{"ujp",0},
-		{"fjp",-1},
-		{"ixj",-1},
-		{"print",-1},
-		{"ind",0},
-		{"lda",1},
-		{"inc",0},
-		{"dec",0},
-		{"ixa",0}
-	};
-	ifstream output;
-	//cout into output
-	code(statementsListHead,table,0,None);
-	string line;
-	while(getline(output,line))
-	{
-		string command = line.substr(line.find_first_of(' '));//str.split()
-		if(command_known.find(command) != command_known.end())
-		{
-			ret+=command_known[command];
-		}else
-	{
-		ret = 2;
-	}
-	return max(ret,find_extreme_pointer(statementsList->left,false));
-}
 
-Function::Function(AST* function_head,Function* static_link):table(this),arguments(this),depth(0),fun_type(function_head->value)
-{
-	AST* id_and_parameters = function_head->left;
-	AST* inOutParameters = id_and_parameters->right;
-	AST* parameters_list = inOutParameters->left;
-	name = id_and_parameters->left->left->value;
-	this->static_link = static_link;
-	table = SymbolTable(this);
-	if(static_link != nullptr){
-		table.size_table = static_link->table.size_table;//"inherit" types
-		arguments.size_table = table.size_table;
-		depth = static_link->depth+1;
-	}
-	AST* content = function_head->right;
-	statementsListHead = content->right;
-	AST* scope = content->left;
-	if(parameters_list != nullptr)
+int Function::find_extreme_pointer()
 	{
-		SymbolTable::fillSymbolTable(arguments,parameters_list);
-		SymbolTable::fillSymbolTable(table,parameters_list);
-		//arguments
-	}
-	if(scope != nullptr){
-		if(scope->left!=nullptr)
-			SymbolTable::fillSymbolTable(table,scope->left);
-		// if(function_head->value == "function")
-		// {
-			//create a fake node for the return value,insert it into the table and 
-		// 	table.insert()
-		// }
-		stack<AST*> backtrace = stack<AST*>();
-		for(AST* functionsList = scope->right;functionsList!=nullptr;functionsList=functionsList->left)
+		int ret = 0;
+		int sp = 0;
+		map<string, int> command_known =
+			{
+				{"ldc", 1},
+				{"sub", -1},
+				{"add", -1},
+				{"div", -1},
+				{"mul", -1},
+				{"and", -1},
+				{"neg", 0},
+				{"not", 0},
+				{"geq", -1},
+				{"leq", -1},
+				{"les", -1},
+				{"grt", -1},
+				{"equ", -1},
+				{"neq", -1},
+				{"ujp", 0},
+				{"fjp", -1},
+				{"ixj", -1},
+				{"print", -1},
+				{"ind", 0},
+				{"lda", 1},
+				{"inc", 0},
+				{"dec", 0},
+				{"ixa", -1},
+				{"mstf", 5},
+				{"mst", 5},
+				{"dpl", 1},
+				{"lod", 1},
+				{"lda", 1},
+				{"str", -1},
+				{"sto", -2}};
+		//redirect stdout into output
+		stringstream output;
+		streambuf *backup_buf;
+		backup_buf = cout.rdbuf();
+		cout.rdbuf(output.rdbuf());
+		code(statementsListHead, table, 0, None);
+		label_num = 0;
+		cout.rdbuf(backup_buf);
+
+		string line;
+		int MP; //temp sp when calling a function
+		while (getline(output, line))
 		{
-			backtrace.push(functionsList);
+			string command = line.substr(0,line.find(' ')); //str.split()
+			if (command_known.find(command) != command_known.end())
+			{
+				sp += command_known[command];
+			}
+			else
+			{
+				string arg = line.substr(line.rfind(' ') + 1);
+				if(command=="smp")
+				{
+					sp -= stoi(arg);
+				}
+				if(command == "movs")
+				{
+					sp+=stoi(arg)-1;
+				}
+				if(command == "cup")
+				{
+					string p1 = line.substr(line.find(' ') + 1);
+					string p = p1.substr(0, p1.find(' '));
+					sp -= stoi(p);//pop args
+					locale loc;
+					string fun_name = " ";
+					fun_name[0] = tolower(arg[0],loc);
+					const Function *callee = find_function(fun_name);
+					if(callee->fun_type == "function")
+					{
+						sp+=1;//push return value;
+					}
+					sp -= 5; //pop descriptor
+				}
+				if(command == "cupi")
+				{
+					const Function *callee = dynamic_cast<const FunVar *>(table.get_variable(stoi(arg)))->static_link;
+					if (callee->fun_type == "function")
+						sp += 1;
+				}
+			}
+			if (ret < sp)
+				ret = sp;
 		}
-		for(;!backtrace.empty(); backtrace.pop())
+		return ret;
+	}
+
+	Function::Function(AST *function_head, Function *static_link) : table(this), arguments(this), depth(0), fun_type(function_head->value)
 	{
-		AST* functionsList = backtrace.top();
-		children.push_back(new Function(functionsList->right,this));
-	}
-	}
-	if(fun_type == "function")
-	{
-		string type = inOutParameters->right->value;
-		AST* declarationsList = new AST("declarationsList",new AST("var",new AST(type,nullptr,nullptr)
-		,new AST("identifier",nullptr,new AST(name,nullptr,nullptr))),nullptr);
-		SymbolTable::fillSymbolTable(table,declarationsList);
-		delete declarationsList;
-	}
+		AST *id_and_parameters = function_head->left;
+		AST *inOutParameters = id_and_parameters->right;
+		AST *parameters_list = inOutParameters->left;
+		name = id_and_parameters->left->left->value;
+		this->static_link = static_link;
+		table = SymbolTable(this);
+		if (static_link != nullptr)
+		{
+			table.size_table = static_link->table.size_table; //"inherit" types
+			arguments.size_table = table.size_table;
+			depth = static_link->depth + 1;
+		}
+		AST *content = function_head->right;
+		statementsListHead = content->right;
+		AST *scope = content->left;
+		if (parameters_list != nullptr)
+		{
+			SymbolTable::fillSymbolTable(arguments, parameters_list);
+			SymbolTable::fillSymbolTable(table, parameters_list);
+			//arguments
+		}
+		if (scope != nullptr)
+		{
+			if (scope->left != nullptr)
+				SymbolTable::fillSymbolTable(table, scope->left);
+			// if(function_head->value == "function")
+			// {
+			//create a fake node for the return value,insert it into the table and
+			// 	table.insert()
+			// }
+			stack<AST *> backtrace = stack<AST *>();
+			for (AST *functionsList = scope->right; functionsList != nullptr; functionsList = functionsList->left)
+			{
+				backtrace.push(functionsList);
+			}
+			for (; !backtrace.empty(); backtrace.pop())
+			{
+				AST *functionsList = backtrace.top();
+				children.push_back(new Function(functionsList->right, this));
+			}
+		}
+		if (fun_type == "function")
+		{
+			string type = inOutParameters->right->value;
+			AST *declarationsList = new AST("declarationsList", new AST("var", new AST(type, nullptr, nullptr), new AST("identifier", nullptr, new AST(name, nullptr, nullptr))), nullptr);
+			SymbolTable::fillSymbolTable(table, declarationsList);
+			delete declarationsList;
+		}
 
 }
 
@@ -439,7 +501,6 @@ void code(AST* head, SymbolTable& table,int loop_num,ControlScope scope) //gets 
 	execute_code(head->right, table,loop_num,scope);
 
 }
-int label_num = 0;
 
 
 void execute_code(AST* head, SymbolTable& table,int loop_num,ControlScope scope)
