@@ -130,7 +130,6 @@ public:
 	Function* owner;
 	SymbolTable(Function* owner):free_address(5),owner(owner)
 	{	}
-
 	Variable& operator[](string name) {return *this->variable_table[name];}
 	const Variable* get_variable(const string& name);
 	static SymbolTable generateSymbolTable(AST* tree); 
@@ -278,6 +277,7 @@ int Function::find_extreme_pointer(AST* statementsList=nullptr,bool start=true)
 	}
 	return max(ret,find_extreme_pointer(statementsList->left,false));
 }
+
 Function::Function(AST* function_head,Function* static_link):table(this),arguments(this),depth(0),fun_type(function_head->value)
 {
 	AST* id_and_parameters = function_head->left;
@@ -313,9 +313,9 @@ Function::Function(AST* function_head,Function* static_link):table(this),argumen
 		{
 			backtrace.push(functionsList);
 		}
-		for(AST* functionsList=backtrace.top();!backtrace.empty(); backtrace.pop())
+		for(;!backtrace.empty(); backtrace.pop())
 	{
-		functionsList = backtrace.top();
+		AST* functionsList = backtrace.top();
 		children.push_back(new Function(functionsList->right,this));
 	}
 	}
