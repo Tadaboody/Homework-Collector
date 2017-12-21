@@ -24,9 +24,10 @@ void execute_code(AST * head, SymbolTable & table,int loop_num,ControlScope scop
 void load_expression(AST * head, SymbolTable & table);
 void load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
-void access_shift(AST* indexList, SymbolTable& table,const Array& array);
+void access_shift(AST* indexList, SymbolTable& table,const Array* array);
 void call_function(AST* call,SymbolTable& table);
 string toupper(const string& str);
+
 class AST
 {
 public:
@@ -182,12 +183,12 @@ const Function* Function::find_function(const string& name)
 {
 	if(name == this->name)
 		return this;
-	const Variable* var = table.get_variable(name);
-	const FunVar* fun = dynamic_cast<const FunVar*>(var);
-	if(fun != nullptr)
-	{
-		return fun->static_link;
-	}
+	// const Variable* var = table.get_variable(name);
+	// const FunVar* fun = dynamic_cast<const FunVar*>(var);
+	// if(fun != nullptr)
+	// {
+	// 	return fun->static_link;
+	// }
 	for(Function* fun:children)
 	{
 		if(name == fun->name)
@@ -218,7 +219,14 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 		Variable* new_var;
 		if(type=="identifier")
 		{
-			new_var = new FunVar(var_address,type,2,offset,table.owner->find_function(var->right->left->value));
+			const Function* static_link = table.owner->find_function(var->right->left->value);
+			if(static_link != nullptr)
+			{
+				new_var = new FunVar(var_address,type,2,offset,static_link);
+			}
+			else{
+				new_var = new Variable(*table.get_variable(var->right->left->value));
+			}
 		}
 		else if(type=="array")
 		{
@@ -254,6 +262,10 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 			new_var->var_address = 0;
 		}
 		new_var->argument_type = var->value;//"var","byValue","byReference". quick fix so I don't change constructor. shows that I needed a factory all the while
+		if(var->value == "byReference")
+		{
+			new_var->size = 1;
+		}
 		new_var->depth = table.owner->depth;
 		table.variable_table[identifier] = (new_var);
 		table.free_address += type=="record"||identifier==table.owner->name?0:table[identifier].size;
@@ -589,24 +601,25 @@ string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TOD
 		const Variable* var = table.get_variable(head->left->value);
 		by_ref = var->argument_type == "byReference";
 		cout << "lda " << table.owner->depth - var->depth << ' ' <<var->var_address << endl;
+		if(by_ref) cout << "ind" << endl;
 		return head->left->value;
 	}
 	else if(data == "pointer")
 	{
 		string type = load_variable_unwrapped(head->left,table,by_ref);
 		cout << "ind" << endl;
-		return dynamic_cast<Pointer&>(table[type]).member_type;
+		return dynamic_cast<const Pointer*>(table.get_variable(type))->member_type;
 	}else if(data == "array")
 	{
 		string type = load_variable_unwrapped(head->left,table,by_ref);
-		const Array& array = dynamic_cast<Array&>(table[type]);
+		const Array* array = dynamic_cast<const Array*>(table.get_variable(type));
 		access_shift(head->right,table,array);
-		return array.member_type;
+		return array->member_type;
 	}else if(data=="record")
 	{
 		string type = load_variable_unwrapped(head->left,table,by_ref);
 		string member_type = head->right->left->value;
-		cout << "inc " << table[member_type].offset << endl;
+		cout << "inc " << table.get_variable(member_type)->offset << endl;
 		return member_type;
 	}
 	return "Shouldn't get here";
@@ -615,16 +628,16 @@ string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TOD
 void load_variable(AST* head, SymbolTable& table){//wrapper function for byval vs byref
 	bool by_ref = false;
 	load_variable_unwrapped(head,table,by_ref);
-	if(by_ref)
-	{
-		cout << "ind" << endl;
-	}
+	// if(by_ref)
+	// {
+	// 	cout << "ind" << endl;
+	// }
 }
 
 //codei
-void access_shift(AST* indexList, SymbolTable& table,const Array& array)
+void access_shift(AST* indexList, SymbolTable& table,const Array* array)
 {
-	int accumilated_size = Array::calculate_size(*array.dimensions,array.member_type_size);
+	int accumilated_size = Array::calculate_size(*array->dimensions,array->member_type_size);
 	stack<AST*> backtrace = stack<AST*>();
 	for(int i=0;indexList!=nullptr;indexList=indexList->left,i++)
 	{
@@ -633,13 +646,14 @@ void access_shift(AST* indexList, SymbolTable& table,const Array& array)
 	for(int i=backtrace.size()-1;!backtrace.empty();i--,backtrace.pop())
 	{
 		indexList = backtrace.top();
-		accumilated_size/= ((*array.dimensions)[i].second -(*array.dimensions)[i].first +1);
+		accumilated_size/= ((*array->dimensions)[i].second -(*array->dimensions)[i].first +1);
 		load_expression(indexList->right,table);
 		cout << "ixa " << accumilated_size << endl;
 	}
-	cout << "dec " << array.subpart << endl;
+	cout << "dec " << array->subpart << endl;
 
 }
+
 int generate_cases(AST* head, SymbolTable& table,int switch_num)
 {
 	int number_of_cases;
@@ -671,12 +685,12 @@ int main()
 }
 */
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
 
-	AST* ast;
+	AST *ast;
 	ifstream myfile;
-	if(argc > 1)//if there are command line arguments (argv[0] = program name)
+	if (argc > 1) //if there are command line arguments (argv[0] = program name)
 	{
 		myfile = ifstream(argv[1]);
 	}
@@ -693,7 +707,6 @@ int main(int argc, char** argv)
 		myfile.close();
 		SymbolTable symbolTable = SymbolTable::generateSymbolTable(ast);
 		generatePCode(ast, symbolTable);
-
 	}
 	else cout << "Unable to open file" << endl;
 	return 0;
