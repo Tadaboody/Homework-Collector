@@ -238,6 +238,7 @@ SymbolTable SymbolTable::generateSymbolTable(AST* tree) {
 			}
 			else{
 				new_var = new Variable(*table.get_variable(var->right->left->value));
+				new_var->var_address = var_address;
 			}
 		}
 		else if(type=="array")
