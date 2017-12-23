@@ -24,7 +24,7 @@ void generatePCode(AST * ast, SymbolTable & symbolTable);
 void code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
 void execute_code(AST * head, SymbolTable & table,int loop_num,ControlScope scope);
 void load_expression(AST * head, SymbolTable & table);
-void load_variable(AST * head, SymbolTable & table);
+string load_variable(AST * head, SymbolTable & table);
 int generate_cases(AST* head, SymbolTable& table,int switch_num);
 void access_shift(AST* indexList, SymbolTable& table,const Array* array);
 void call_function(AST* call,SymbolTable& table);
@@ -160,6 +160,7 @@ const Variable* SymbolTable::get_variable(int address)
 		if (var.second->var_address == address)
 			return var.second;
 	}
+	return nullptr;
 }
 class FunVar : public Variable
 {
@@ -186,11 +187,11 @@ public:
 	void print_body();
 	const inline int stack_pointer() const {return table.free_address;}
 	const inline int argument_size() const {return arguments.free_address - 5;}
-	const Function* find_function(const string& name) ;
+	const Function* find_function(const string& name) const;
 	inline string function_label() const {return toupper(name);}
 	// void createCall();
 };
-const Function* Function::find_function(const string& name)
+const Function* Function::find_function(const string& name)const
 {
 	if(name == this->name)
 		return this;
@@ -481,6 +482,7 @@ void Function::print_body()
 			if(owner->static_link == nullptr){return nullptr;}
 			return owner->static_link->table.get_variable(name);
 		}
+		return nullptr;
 	
 	}
 void generatePCode(AST* ast, SymbolTable& symbolTable) {
@@ -596,13 +598,19 @@ void load_args(AST* argument_list,SymbolTable& table,const Function* callee)
 			{
 				if (var->size > 1)
 				{
-					load_variable(argument_list->right, table);
 					FunVar* fun = dynamic_cast<FunVar*>(var);
 					if (fun != nullptr)
 					{
+						string arg_name = argument_list->right->left->value;
+						if(table.get_variable(argument_list->right->left->value) != nullptr)
+							load_variable(argument_list->right,table);
+						else
+							cout << "ldc " << callee->find_function(arg_name)->function_label() << endl;
 						cout << "lda " << fun->static_link->depth -1 -table.owner->depth << " 0" << endl;
-					}else
+					}else{
+						load_variable(argument_list->right, table);
 						cout << "movs " << var->size << endl;
+				}
 				}
 				else
 					load_expression(argument_list->right,table);
@@ -625,7 +633,7 @@ void call_function(AST* call, SymbolTable& table)
 		cout << "cupi " << caller->depth - function_variable->depth << " " << function_variable->var_address << endl;
 	}else{
 	const Function* callee  = caller->find_function(fun_id);
-	cout << "mst " << callee->depth  - 1 - table.owner->depth << endl;
+	cout << "mst " << caller->depth - callee->depth+1 << endl;
 	load_args(call->right,table,callee);
 	cout << "cup " << callee->argument_size() << ' ' << callee->function_label() << endl;
 	}
@@ -681,35 +689,30 @@ void load_expression(AST* head, SymbolTable& table)
 //codel
 
 
-string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TODO: put pointer/struct access here
+string load_variable(AST* head, SymbolTable& table) //TODO: put pointer/struct access here
 {
 	if(data == "identifier"){
 		const Function* fun = table.owner->find_function(head->left->value);
-		if(fun!=nullptr)
-		{
-			cout << "ldc " << fun->function_label() << endl;
-			return "";
-		}
 		const Variable* var = table.get_variable(head->left->value);
-		by_ref = var->argument_type == "byReference";
 		cout << "lda " << table.owner->depth - var->depth << ' ' <<var->var_address << endl;
-		if(by_ref) cout << "ind" << endl;
+		if (var->argument_type == "byReference")
+			cout << "ind" << endl;
 		return head->left->value;
 	}
 	else if(data == "pointer")
 	{
-		string type = load_variable_unwrapped(head->left,table,by_ref);
+		string type = load_variable(head->left,table);
 		cout << "ind" << endl;
 		return dynamic_cast<const Pointer*>(table.get_variable(type))->member_type;
 	}else if(data == "array")
 	{
-		string type = load_variable_unwrapped(head->left,table,by_ref);
+		string type = load_variable(head->left,table);
 		const Array* array = dynamic_cast<const Array*>(table.get_variable(type));
 		access_shift(head->right,table,array);
 		return array->member_type;
 	}else if(data=="record")
 	{
-		string type = load_variable_unwrapped(head->left,table,by_ref);
+		string type = load_variable(head->left,table);
 		string member_type = head->right->left->value;
 		cout << "inc " << table.get_variable(member_type)->offset << endl;
 		return member_type;
@@ -717,14 +720,6 @@ string load_variable_unwrapped(AST* head, SymbolTable& table,bool& by_ref) //TOD
 	return "Shouldn't get here";
 }
 
-void load_variable(AST* head, SymbolTable& table){//wrapper function for byval vs byref
-	bool by_ref = false;
-	load_variable_unwrapped(head,table,by_ref);
-	// if(by_ref)
-	// {
-	// 	cout << "ind" << endl;
-	// }
-}
 
 //codei
 void access_shift(AST* indexList, SymbolTable& table,const Array* array)
