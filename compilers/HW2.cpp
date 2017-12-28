@@ -139,6 +139,7 @@ class SymbolTable
 	address free_address;
 	map<string, Variable *> variable_table;
 	Function *owner;
+	SymbolTable(){}
 	SymbolTable(Function *owner) : free_address(5), owner(owner)
 	{
 	}
@@ -776,12 +777,11 @@ int generate_cases(AST *head, SymbolTable &table, int switch_num)
 	cout << "ujp switch_end_" << switch_num << endl;
 	return number_of_cases;
 }
-/*
 int main()
 {
 	AST* ast;
 	SymbolTable symbolTable;
-	ifstream myfile("tree7.txt");
+	ifstream myfile("tree12.txt");
 	if (myfile.is_open())
 	{
 		ast = AST::createAST(myfile);
@@ -792,8 +792,7 @@ int main()
 	else cout << "Unable to open file";
 	return 0;
 }
-*/
-
+/*
 int main(int argc, char **argv)
 {
 
@@ -821,3 +820,4 @@ int main(int argc, char **argv)
 		cout << "Unable to open file" << endl;
 	return 0;
 }
+*/
