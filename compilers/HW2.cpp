@@ -347,7 +347,6 @@ int Function::find_extreme_pointer()
 	cout.rdbuf(backup_buf);
 
 	string line;
-	int MP; //temp sp when calling a function
 	while (getline(output, line))
 	{
 		string command = line.substr(0, line.find(' ')); //str.split()
@@ -715,7 +714,6 @@ string load_variable(AST *head, SymbolTable &table) //TODO: put pointer/struct a
 {
 	if (data == "identifier")
 	{
-		const Function *fun = table.owner->find_function(head->left->value);
 		const Variable *var = table.get_variable(head->left->value);
 		cout << "lda " << table.owner->depth - var->depth << ' ' << var->var_address << endl;
 		if (var->argument_type == "byReference")
