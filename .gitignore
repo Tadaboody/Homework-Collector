@@ -2,5 +2,5 @@
 *.zip
 *.c
 submitters.txt
-*.txt
+compilers/**/*.txt
 **/out/
