@@ -35,8 +35,7 @@ def main():
     clf.fit({'a': a_train, 'b': b_train}, 1)
 
     opt_window, win_array, success_array = find_optimal_window_size(clf, a_val, b_val)
-    print(win_array)
-    print(success_array)
+    print(classify_data(clf, opt_window, a_test, b_test)
 
 
 def find_optimal_window_size(clf, a_data, b_data):
