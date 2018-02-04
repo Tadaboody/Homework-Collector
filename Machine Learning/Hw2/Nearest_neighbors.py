@@ -36,7 +36,6 @@ def find_optimal_neighbors(train_data, valid_data):
         if max_rate <= success_rate:
             max_rate = success_rate
             max_k = k
-    print("success rate of", max_k, "neighbors:", max_rate)
     return max_k, k_neighbors, success_rates
 
 
