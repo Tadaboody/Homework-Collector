@@ -49,3 +49,4 @@ def success_for_normal_regression(size,data):
     return success(size,data,norm_train)
 
 def success_for_ridge_regression(size,data,gamma):
+    return success(size,data,ridge_train,gamma=gamma)
